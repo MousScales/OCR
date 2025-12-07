@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PDF Preview</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #e5e7eb;
+        color: #111827;
+        display: flex;
+        min-height: 100vh;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .card {
+        display: flex;
+        flex: 1;
+        width: 100%;
+        max-width: none;
+        height: 100vh;
+        box-sizing: border-box;
+        padding: 0;
+        background: transparent;
+        box-shadow: none;
+        border: none;
+      }
+
+      .main-layout {
+        display: flex;
+        align-items: stretch;
+        width: 100%;
+        padding: 0;
+        border-left: 1px solid rgba(31, 41, 55, 1);
+        border-right: 1px solid rgba(31, 41, 55, 1);
+      }
+
+      .column {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .column-left {
+        width: 230px;
+        border-right: 1px solid rgba(31, 41, 55, 1);
+        background: #f3f4f6;
+        display: flex;
+        flex-direction: column;
+        transition: width 0.2s ease-out;
+      }
+
+      .column-left.icons-only {
+        width: 60px;
+      }
+
+      .column-left.icons-only .state-column-title,
+      .column-left.icons-only .state-search {
+        display: none;
+      }
+
+      .column-left.icons-only .state-item span {
+        display: none;
+      }
+
+      .column-left.icons-only .state-item {
+        justify-content: center;
+        padding: 8px 4px;
+        margin-bottom: 6px;
+      }
+
+      .column-left.icons-only .state-icon {
+        margin: 0 auto;
+      }
+
+      .column-center {
+        flex: 1.2;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+      }
+
+      .center-header {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 8px 16px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .center-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0 16px 16px;
+      }
+
+      .column-right {
+        width: 340px;
+        border-left: 1px solid rgba(31, 41, 55, 1);
+        background: #f3f4f6;
+      }
+
+      .column-left.collapsed {
+        width: 0;
+      }
+
+      .column-left.collapsed .state-column {
+        display: none;
+      }
+
+      .drag-handle {
+        width: 4px;
+        background: #e5e7eb;
+        cursor: col-resize;
+        flex-shrink: 0;
+      }
+
+      .drag-handle:hover {
+        background: #d1d5db;
+      }
+
+      @media (max-width: 960px) {
+      .card {
+          height: auto;
+        }
+
+        .main-layout {
+          flex-direction: column;
+          height: auto;
+        }
+
+        .column-left,
+        .column-right {
+        width: 100%;
+        }
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #111827;
+      }
+
+      .controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        position: relative;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #ffffff;
+        background: #1d4ed8;
+        box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: transform 0.12s ease-out, box-shadow 0.12s ease-out,
+          filter 0.12s ease-out;
+      }
+
+      #analyze-btn {
+        display: none;
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+
+      #analyze-btn.show {
+        display: inline-flex;
+        animation: slideInButton 0.4s ease-out forwards;
+      }
+
+      @keyframes slideInButton {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.35);
+        filter: brightness(1.02);
+      }
+
+      button:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25);
+      }
+
+      .file-name {
+        font-size: 13px;
+        color: #374151;
+        display: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .preview-wrapper {
+        position: relative;
+        overflow: hidden;
+        background: transparent;
+        border: none;
+        flex: 1;
+        width: 100%;
+        display: none;
+      }
+
+      .back-btn {
+        width: auto;
+        height: auto;
+        border: none;
+        background: transparent;
+        color: #1d4ed8;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        margin-right: auto;
+        flex-shrink: 0;
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: background 0.2s ease;
+      }
+
+      .back-btn:hover {
+        background: #e0e7ff;
+        color: #1e40af;
+      }
+
+      .back-btn:active {
+        background: #c7d2fe;
+      }
+
+      .close-pdf-btn {
+        width: auto;
+        height: auto;
+        border: none;
+        background: transparent;
+        color: #b91c1c;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-right: 12px;
+        flex-shrink: 0;
+        padding: 4px;
+      }
+
+      .close-pdf-btn:hover {
+        color: #dc2626;
+      }
+
+      .close-pdf-btn:active {
+        color: #991b1b;
+      }
+
+      .state-label {
+        padding: 10px 16px 4px;
+        font-size: 13px;
+        color: #374151;
+      }
+
+      .placeholder {
+        padding: 40px 32px;
+        text-align: center;
+        color: #4b5563;
+        font-size: 14px;
+      }
+
+      .placeholder span {
+        display: block;
+        margin-top: 6px;
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      .pdf-viewer {
+        display: none;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #ffffff;
+      }
+
+      .image-viewer {
+        display: none;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #ffffff;
+      }
+
+      .pill {
+        display: none;
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      .analysis-section {
+        margin-top: 0;
+        padding: 10px 12px;
+        background: transparent;
+        border: none;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .analysis-title {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 6px;
+        color: #111827;
+        text-align: center;
+      }
+
+      .analysis-meta {
+        font-size: 12px;
+        color: #4b5563;
+        margin-bottom: 8px;
+      }
+
+      .analysis-body {
+        font-size: 13px;
+        color: #111827;
+        white-space: normal;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+      }
+
+      .analysis-empty {
+        color: #6b7280;
+        font-style: italic;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+      }
+
+      .analysis-analyzing {
+        color: #4b5563;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .analysis-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .analysis-block {
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        border: none;
+        background: transparent;
+      }
+
+      .analysis-block-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+      }
+
+      .analysis-good {
+      }
+
+      .analysis-good .analysis-block-title {
+        color: #166534;
+      }
+
+      .analysis-issues {
+      }
+
+      .analysis-issues .analysis-block-title {
+        color: #991b1b;
+      }
+
+      .analysis-list {
+        padding-left: 16px;
+        margin: 0;
+      }
+
+      .analysis-list li {
+        margin-bottom: 4px;
+      }
+
+      .analysis-disclaimer {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #6b7280;
+        border-top: 1px dashed rgba(148, 163, 184, 0.4);
+        padding-top: 8px;
+      }
+
+      .state-column {
+        padding: 10px 12px;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .state-column-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 8px;
+        text-align: center;
+      }
+
+      .state-column-title img {
+        display: none;
+        max-width: 100%;
+        height: auto;
+        max-height: 40px;
+        object-fit: contain;
+      }
+
+      .column-left.icons-only .state-column-title {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .column-left.icons-only .state-column-title::before {
+        content: "";
+        display: none;
+      }
+
+      .column-left.icons-only .state-column-title img {
+        display: block;
+      }
+
+      .column-left.icons-only .state-column-title-text {
+        display: none;
+      }
+
+      .state-search {
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #111827;
+        background: #ffffff;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s ease-out;
+      }
+
+      .state-search:focus {
+        border-color: #1d4ed8;
+        box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.1);
+      }
+
+      .state-search::placeholder {
+        color: #9ca3af;
+      }
+
+      .state-error {
+        font-size: 12px;
+        color: #b91c1c;
+        text-align: left;
+        padding-left: 4px;
+        margin-right: auto;
+        min-height: 16px;
+      }
+
+      .poa-status {
+        font-size: 13px;
+        font-weight: 500;
+        margin-right: auto;
+        min-height: 20px;
+        display: none;
+      }
+
+      .poa-status.is-poa {
+        color: #166534;
+        display: block;
+      }
+
+      .poa-status.not-poa {
+        color: #b91c1c;
+        display: block;
+      }
+
+      .poa-status.checking {
+        color: #4b5563;
+        display: block;
+      }
+
+      .bouncing-dots {
+        display: inline-block;
+      }
+
+      .bouncing-dots span {
+        display: inline-block;
+        animation: bounce 1.4s infinite ease-in-out both;
+      }
+
+      .bouncing-dots span:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+
+      .bouncing-dots span:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+
+      @keyframes bounce {
+        0%, 80%, 100% {
+          transform: scale(0);
+        }
+        40% {
+          transform: scale(1);
+        }
+      }
+
+      .state-column-subtitle {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 10px;
+      }
+
+      .state-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .state-item {
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        color: #111827;
+        border: 1px solid transparent;
+        margin-bottom: 4px;
+        transition: background 0.12s ease-out, border-color 0.12s ease-out,
+          color 0.12s ease-out, transform 0.08s ease-out;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .state-item:hover {
+        background: #e5e7eb;
+        border-color: #d1d5db;
+        transform: translateY(-0.5px);
+      }
+
+      .state-item.active {
+        background: #1d4ed8;
+        color: #f9fafb;
+        border-color: #1d4ed8;
+      }
+
+      .state-icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      .state-icon-circle {
+        fill: #e5e7eb;
+        stroke: #d1d5db;
+      }
+
+      .state-icon-text {
+        font-size: 9px;
+        font-weight: 600;
+        fill: #111827;
+      }
+
+      .state-item.active .state-icon-circle {
+        fill: #1d4ed8;
+        stroke: #1d4ed8;
+      }
+
+      .state-item.active .state-icon-text {
+        fill: #f9fafb;
+      }
+
+      .pin-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+
+      .pin-container {
+        background: #ffffff;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+      }
+
+      .pin-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+
+      .pin-subtitle {
+        font-size: 14px;
+        color: #6b7280;
+        margin-bottom: 24px;
+      }
+
+      .pin-input {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 18px;
+        text-align: center;
+        letter-spacing: 8px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s ease;
+        font-family: monospace;
+        margin-bottom: 16px;
+      }
+
+      .pin-input:focus {
+        border-color: #1d4ed8;
+      }
+
+      .pin-error {
+        color: #b91c1c;
+        font-size: 13px;
+        margin-bottom: 16px;
+        min-height: 20px;
+        display: none;
+      }
+
+      .pin-error.show {
+        display: block;
+      }
+
+      .pin-submit {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #ffffff;
+        background: #1d4ed8;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .pin-submit:hover {
+        background: #1e40af;
+      }
+
+      .pin-submit:active {
+        background: #1e3a8a;
+      }
+
+      .main-content {
+        display: none;
+      }
+
+      .main-content.authenticated {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- PIN Entry Overlay -->
+    <div class="pin-overlay" id="pin-overlay">
+      <div class="pin-container">
+        <div class="pin-title">Enter PIN</div>
+        <div class="pin-subtitle">Please enter your PIN to access the site</div>
+        <input
+          type="password"
+          class="pin-input"
+          id="pin-input"
+          placeholder="Enter PIN"
+          maxlength="10"
+          autocomplete="off"
+        />
+        <div class="pin-error" id="pin-error">Incorrect PIN. Please try again.</div>
+        <button class="pin-submit" id="pin-submit">Submit</button>
+      </div>
+    </div>
+
+    <div class="card main-content" id="main-content">
+      <div class="main-layout">
+        <div class="column column-left" id="column-left">
+          <div class="state-column">
+            <div class="state-column-title">
+              <span class="state-column-title-text">Select a state</span>
+              <img src="assets/usa.png" alt="Select a state" />
+            </div>
+            <input type="text" id="state-search" class="state-search" placeholder="Search states..." />
+            <ul class="state-list" id="state-list">
+              <li class="state-item" data-state="Alabama">
+                <span>Alabama</span>
+                <img class="state-icon" src="assets/Alabama.png.png" alt="Alabama" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Alaska">
+                <span>Alaska</span>
+                <img class="state-icon" src="assets/Alaska.png" alt="Alaska" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Arizona">
+                <span>Arizona</span>
+                <img class="state-icon" src="assets/Arizona.png" alt="Arizona" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Arkansas">
+                <span>Arkansas</span>
+                <img class="state-icon" src="assets/Arkansas.png" alt="Arkansas" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="California">
+                <span>California</span>
+                <img class="state-icon" src="assets/California.png" alt="California" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Colorado">
+                <span>Colorado</span>
+                <img class="state-icon" src="assets/Colorado.png" alt="Colorado" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Connecticut">
+                <span>Connecticut</span>
+                <img class="state-icon" src="assets/Connecticut.png" alt="Connecticut" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Delaware">
+                <span>Delaware</span>
+                <img class="state-icon" src="assets/Delaware.png" alt="Delaware" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Florida">
+                <span>Florida</span>
+                <img class="state-icon" src="assets/Florida.png" alt="Florida" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Georgia">
+                <span>Georgia</span>
+                <img class="state-icon" src="assets/Georgia.png" alt="Georgia" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Hawaii">
+                <span>Hawaii</span>
+                <img class="state-icon" src="assets/Hawaii.png" alt="Hawaii" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Idaho">
+                <span>Idaho</span>
+                <img class="state-icon" src="assets/Idaho.png" alt="Idaho" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Illinois">
+                <span>Illinois</span>
+                <img class="state-icon" src="assets/Illinois.png" alt="Illinois" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Indiana">
+                <span>Indiana</span>
+                <img class="state-icon" src="assets/Indiana.png" alt="Indiana" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Iowa">
+                <span>Iowa</span>
+                <img class="state-icon" src="assets/Iowa.png" alt="Iowa" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Kansas">
+                <span>Kansas</span>
+                <img class="state-icon" src="assets/Kansas.png" alt="Kansas" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Kentucky">
+                <span>Kentucky</span>
+                <img class="state-icon" src="assets/Kentucky.png" alt="Kentucky" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Louisiana">
+                <span>Louisiana</span>
+                <img class="state-icon" src="assets/Lousiana.png" alt="Louisiana" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Maine">
+                <span>Maine</span>
+                <img class="state-icon" src="assets/Maine.png" alt="Maine" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Maryland">
+                <span>Maryland</span>
+                <img class="state-icon" src="assets/Maryland.png" alt="Maryland" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Massachusetts">
+                <span>Massachusetts</span>
+                <img class="state-icon" src="assets/Massachusetts.png" alt="Massachusetts" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Michigan">
+                <span>Michigan</span>
+                <img class="state-icon" src="assets/Michigan.png" alt="Michigan" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Minnesota">
+                <span>Minnesota</span>
+                <img class="state-icon" src="assets/Minnesota.png" alt="Minnesota" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Mississippi">
+                <span>Mississippi</span>
+                <img class="state-icon" src="assets/Mississippi.png" alt="Mississippi" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Missouri">
+                <span>Missouri</span>
+                <img class="state-icon" src="assets/Missouri.png" alt="Missouri" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Montana">
+                <span>Montana</span>
+                <img class="state-icon" src="assets/Montana.png" alt="Montana" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Nebraska">
+                <span>Nebraska</span>
+                <img class="state-icon" src="assets/Nebraska.png" alt="Nebraska" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Nevada">
+                <span>Nevada</span>
+                <img class="state-icon" src="assets/Nevada.png" alt="Nevada" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="New Hampshire">
+                <span>New Hampshire</span>
+                <img class="state-icon" src="assets/New Hampshire.png" alt="New Hampshire" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="New Jersey">
+                <span>New Jersey</span>
+                <img class="state-icon" src="assets/New Jersey.png" alt="New Jersey" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="New Mexico">
+                <span>New Mexico</span>
+                <img class="state-icon" src="assets/New Mexico.png" alt="New Mexico" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="New York">
+                <span>New York</span>
+                <img class="state-icon" src="assets/New York.png" alt="New York" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="North Carolina">
+                <span>North Carolina</span>
+                <img class="state-icon" src="assets/north_carolina_silhouette.png" alt="North Carolina" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="North Dakota">
+                <span>North Dakota</span>
+                <img class="state-icon" src="assets/North Dakota.png" alt="North Dakota" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Ohio">
+                <span>Ohio</span>
+                <img class="state-icon" src="assets/ohio.png" alt="Ohio" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Oklahoma">
+                <span>Oklahoma</span>
+                <img class="state-icon" src="assets/Oklahoma.png" alt="Oklahoma" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Oregon">
+                <span>Oregon</span>
+                <img class="state-icon" src="assets/Oregon.png" alt="Oregon" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Pennsylvania">
+                <span>Pennsylvania</span>
+                <img class="state-icon" src="assets/Pennsylvania.png" alt="Pennsylvania" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Rhode Island">
+                <span>Rhode Island</span>
+                <img class="state-icon" src="assets/Rhode Island.png" alt="Rhode Island" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="South Carolina">
+                <span>South Carolina</span>
+                <img class="state-icon" src="assets/South Carolina.png" alt="South Carolina" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="South Dakota">
+                <span>South Dakota</span>
+                <img class="state-icon" src="assets/South Dakota.png" alt="South Dakota" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Tennessee">
+                <span>Tennessee</span>
+                <img class="state-icon" src="assets/Tennessee.png" alt="Tennessee" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Texas">
+                <span>Texas</span>
+                <img class="state-icon" src="assets/Texas.png" alt="Texas" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Utah">
+                <span>Utah</span>
+                <img class="state-icon" src="assets/Utah.png" alt="Utah" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Vermont">
+                <span>Vermont</span>
+                <img class="state-icon" src="assets/Vermont.png" alt="Vermont" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Virginia">
+                <span>Virginia</span>
+                <img class="state-icon" src="assets/Virginia.png" alt="Virginia" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Washington">
+                <span>Washington</span>
+                <img class="state-icon" src="assets/Washington (1).png" alt="Washington" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="West Virginia">
+                <span>West Virginia</span>
+                <img class="state-icon" src="assets/West Virginia (1).png" alt="West Virginia" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Wisconsin">
+                <span>Wisconsin</span>
+                <img class="state-icon" src="assets/Wisconsin.png" alt="Wisconsin" onerror="this.style.display='none'" />
+              </li>
+              <li class="state-item" data-state="Wyoming">
+                <span>Wyoming</span>
+                <img class="state-icon" src="assets/Wyoming.png" alt="Wyoming" onerror="this.style.display='none'" />
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="drag-handle" id="drag-left"></div>
+        <div class="column column-center" id="column-center">
+          <div class="center-header">
+            <button id="back-btn" class="back-btn" type="button" onclick="window.location.href='main.html'" title="Back to Main">← Back</button>
+            <button id="close-pdf-btn" class="close-pdf-btn" type="button">✕</button>
+            <div id="poa-status" class="poa-status"></div>
+            <div id="state-error" class="state-error"></div>
+            <button id="analyze-btn" type="button">
+          <span>Analyze</span>
+            </button>
+          </div>
+          <div class="center-body">
+      <div class="controls">
+            <input id="file-input" type="file" accept="application/pdf,image/png,image/jpeg,image/jpg,image/gif,image/webp" />
+              <button id="select-btn" type="button">
+                <span>Select POA</span>
+        </button>
+        <div id="file-name" class="file-name">No file selected</div>
+      </div>
+      <div class="preview-wrapper">
+        <div class="pill">Preview only · file never uploads</div>
+        <div id="state-label" class="state-label">
+          No state selected
+        </div>
+        <div id="placeholder" class="placeholder">
+                Choose a state on the left, then select a PDF or image file to see a live
+                preview here.
+          <span>Works entirely in your browser using a temporary URL.</span>
+        </div>
+        <iframe id="pdf-viewer" class="pdf-viewer"></iframe>
+        <img id="image-viewer" class="image-viewer" alt="Document preview" />
+      </div>
+          </div>
+        </div>
+        <div class="drag-handle" id="drag-right"></div>
+        <div class="column column-right" id="column-right">
+      <div id="analysis-section" class="analysis-section">
+        <div class="analysis-title">Analysis</div>
+        <div id="analysis-meta" class="analysis-meta"></div>
+        <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
+        </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <script>
+      // PIN Authentication
+      const CORRECT_PIN = "11335";
+      const PIN_KEY = "site_authenticated";
+
+      // Check if user is authenticated
+      function checkAuthentication() {
+        const authenticated = sessionStorage.getItem(PIN_KEY) === "true";
+        if (authenticated) {
+          document.getElementById("pin-overlay").style.display = "none";
+          document.getElementById("main-content").classList.add("authenticated");
+        } else {
+          document.getElementById("pin-overlay").style.display = "flex";
+          document.getElementById("main-content").classList.remove("authenticated");
+        }
+      }
+
+      // Handle PIN submission
+      function handlePinSubmit() {
+        const pinInput = document.getElementById("pin-input");
+        const pinError = document.getElementById("pin-error");
+        const enteredPin = pinInput.value;
+
+        if (enteredPin === CORRECT_PIN) {
+          sessionStorage.setItem(PIN_KEY, "true");
+          pinError.classList.remove("show");
+          pinInput.value = "";
+          checkAuthentication();
+        } else {
+          pinError.classList.add("show");
+          pinInput.value = "";
+          pinInput.focus();
+        }
+      }
+
+      // Initialize PIN authentication
+      document.getElementById("pin-submit").addEventListener("click", handlePinSubmit);
+      document.getElementById("pin-input").addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          handlePinSubmit();
+        }
+      });
+
+      // Check authentication on page load
+      checkAuthentication();
+
+      (function () {
+        const stateItems = document.querySelectorAll(".state-item");
+        const fileInput = document.getElementById("file-input");
+        const selectBtn = document.getElementById("select-btn");
+        const analyzeBtn = document.getElementById("analyze-btn");
+        const fileNameLabel = document.getElementById("file-name");
+        const pdfViewer = document.getElementById("pdf-viewer");
+        const placeholder = document.getElementById("placeholder");
+        const stateLabel = document.getElementById("state-label");
+        const analysisSection = document.getElementById("analysis-section");
+        const analysisMeta = document.getElementById("analysis-meta");
+        const analysisBody = document.getElementById("analysis-body");
+        const previewWrapper = document.querySelector(".preview-wrapper");
+        const closePdfBtn = document.getElementById("close-pdf-btn");
+        const stateError = document.getElementById("state-error");
+        const poaStatus = document.getElementById("poa-status");
+        const columnLeft = document.getElementById("column-left");
+        const columnRight = document.getElementById("column-right");
+        const dragLeft = document.getElementById("drag-left");
+        const dragRight = document.getElementById("drag-right");
+        const stateSearch = document.getElementById("state-search");
+
+        let currentObjectUrl = null;
+        let selectedState = "";
+        let isPOA = false;
+        let isResizingLeft = false;
+        let isResizingRight = false;
+        let startX = 0;
+        let startLeftWidth = 0;
+        let startRightWidth = 0;
+
+        // Function to save document to localStorage
+        function saveDocumentToStorage(file) {
+          try {
+            const documents = JSON.parse(localStorage.getItem('poa_documents') || '[]');
+            const documentInfo = {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              date: new Date().toISOString()
+            };
+            
+            // Check if document already exists (by name and date)
+            const exists = documents.some(doc => doc.name === file.name && doc.date === documentInfo.date);
+            if (!exists) {
+              documents.push(documentInfo);
+              localStorage.setItem('poa_documents', JSON.stringify(documents));
+            }
+          } catch (e) {
+            console.error('Error saving document to storage:', e);
+          }
+        }
+
+        function resetStateSelection() {
+          selectedState = "";
+            stateLabel.textContent = "No state selected";
+            fileInput.value = "";
+          fileNameLabel.textContent = "";
+            pdfViewer.style.display = "none";
+            const imageViewer = document.getElementById("image-viewer");
+            if (imageViewer) {
+              imageViewer.style.display = "none";
+            }
+            placeholder.style.display = "block";
+          if (previewWrapper) {
+            previewWrapper.style.display = "none";
+          }
+          if (closePdfBtn) {
+            closePdfBtn.style.display = "none";
+          }
+          if (selectBtn) {
+            selectBtn.style.display = "inline-flex";
+          }
+            analysisMeta.textContent = "";
+            analysisBody.textContent = "No analysis yet";
+            analysisBody.classList.add("analysis-empty");
+          if (stateError) {
+            stateError.textContent = "";
+          }
+          if (poaStatus) {
+            poaStatus.className = "poa-status";
+            poaStatus.textContent = "";
+          }
+          isPOA = false;
+          analyzeBtn.classList.remove("show");
+            if (currentObjectUrl) {
+              URL.revokeObjectURL(currentObjectUrl);
+              currentObjectUrl = null;
+            }
+          stateItems.forEach((item) => item.classList.remove("active"));
+        }
+
+        // Search/filter functionality
+        if (stateSearch) {
+          stateSearch.addEventListener("input", (e) => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            stateItems.forEach((item) => {
+              const stateName = item.getAttribute("data-state") || "";
+              const stateText = item.querySelector("span")?.textContent || "";
+              if (
+                stateName.toLowerCase().includes(searchTerm) ||
+                stateText.toLowerCase().includes(searchTerm)
+              ) {
+                item.style.display = "flex";
+              } else {
+                item.style.display = "none";
+              }
+            });
+          });
+        }
+
+        stateItems.forEach((item) => {
+          item.addEventListener("click", async () => {
+            const state = item.getAttribute("data-state") || "";
+            if (!state) {
+              resetStateSelection();
+            return;
+          }
+
+            selectedState = state;
+            stateItems.forEach((el) => el.classList.remove("active"));
+            item.classList.add("active");
+
+          stateLabel.textContent = "Selected state: " + selectedState;
+            if (stateError) {
+              stateError.textContent = "";
+            }
+
+            // Reset analysis when state changes
+            analysisMeta.textContent = "";
+            analysisBody.textContent = "No analysis yet";
+            analysisBody.classList.add("analysis-empty");
+
+            // If there's a file already loaded, refresh the POA check
+            const file = fileInput.files && fileInput.files[0];
+            if (file) {
+              // Re-check if it's a POA for the new state
+              await checkIfPOA(file);
+            } else {
+              // No file, so hide analyze button
+              analyzeBtn.disabled = true;
+              analyzeBtn.classList.remove("show");
+            }
+          });
+        });
+
+        selectBtn.addEventListener("click", () => {
+          if (!selectedState) {
+            if (stateError) {
+              stateError.textContent = "Select state first";
+            }
+            return;
+          }
+          fileInput.click();
+        });
+
+        // Function to check if file is a POA
+        async function checkIfPOA(file) {
+          if (!poaStatus) return;
+
+          poaStatus.className = "poa-status checking";
+          poaStatus.innerHTML = "Checking if this is a POA<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>";
+          analyzeBtn.disabled = true;
+          isPOA = false;
+
+          // Check file size (10MB limit)
+          if (file.size > 10 * 1024 * 1024) {
+            poaStatus.className = "poa-status not-poa";
+            poaStatus.textContent = "File too large (max 10MB)";
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.remove("show");
+            isPOA = false;
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append("file", file);
+
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+            const resp = await fetch("http://localhost:5000/check-poa", {
+              method: "POST",
+              body: formData,
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!resp.ok) {
+              const errorData = await resp.json().catch(() => ({}));
+              throw new Error(errorData.error || `Server error: ${resp.status}`);
+            }
+
+            const data = await resp.json();
+            
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            
+            if (data.isPOA) {
+              isPOA = true;
+              poaStatus.className = "poa-status is-poa";
+              const poaTypeText = data.poaType ? ` (${data.poaType})` : "";
+              poaStatus.textContent = `This is a POA${poaTypeText}`;
+              if (selectedState) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.classList.add("show");
+              }
+            } else {
+              isPOA = false;
+              poaStatus.className = "poa-status not-poa";
+              poaStatus.textContent = "This isn't a POA";
+              analyzeBtn.disabled = true;
+              analyzeBtn.classList.remove("show");
+            }
+          } catch (err) {
+            console.error("Error checking POA:", err);
+            if (err.name === 'AbortError') {
+              poaStatus.className = "poa-status not-poa";
+              poaStatus.textContent = "Request timed out";
+            } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+              poaStatus.className = "poa-status not-poa";
+              poaStatus.textContent = "Server connection error";
+            } else {
+              poaStatus.className = "poa-status not-poa";
+              poaStatus.textContent = err.message || "Error checking file";
+            }
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.remove("show");
+            isPOA = false;
+          }
+        }
+
+        fileInput.addEventListener("change", async () => {
+          const file = fileInput.files && fileInput.files[0];
+          if (!file) {
+            return;
+          }
+
+          const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
+          if (!allowedTypes.includes(file.type)) {
+            alert("Please select a PDF or image file (PNG, JPG, etc.).");
+            fileInput.value = "";
+            return;
+          }
+
+          fileNameLabel.textContent = file.name;
+
+          // Hide analyze button initially
+          analyzeBtn.classList.remove("show");
+          analyzeBtn.disabled = true;
+
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+          }
+
+          currentObjectUrl = URL.createObjectURL(file);
+          
+          // Show PDF viewer for PDFs, image viewer for images
+          if (file.type === "application/pdf") {
+            pdfViewer.src = currentObjectUrl + "#toolbar=0&navpanes=0&scrollbar=0";
+          pdfViewer.style.display = "block";
+            const imageViewer = document.getElementById("image-viewer");
+            if (imageViewer) {
+              imageViewer.style.display = "none";
+            }
+          } else if (file.type.startsWith("image/")) {
+            const imageViewer = document.getElementById("image-viewer");
+            if (imageViewer) {
+              imageViewer.src = currentObjectUrl;
+              imageViewer.style.display = "block";
+            }
+            pdfViewer.style.display = "none";
+          }
+          
+          placeholder.style.display = "none";
+          if (previewWrapper) {
+            previewWrapper.style.display = "block";
+          }
+          if (closePdfBtn) {
+            closePdfBtn.style.display = "flex";
+          }
+          if (selectBtn) {
+            selectBtn.style.display = "none";
+          }
+
+          // Save document to localStorage
+          saveDocumentToStorage(file);
+
+          // Check if file is a POA
+          await checkIfPOA(file);
+        });
+
+        if (closePdfBtn) {
+          closePdfBtn.addEventListener("click", () => {
+            if (currentObjectUrl) {
+              URL.revokeObjectURL(currentObjectUrl);
+              currentObjectUrl = null;
+            }
+            pdfViewer.src = "";
+            pdfViewer.style.display = "none";
+            const imageViewer = document.getElementById("image-viewer");
+            if (imageViewer) {
+              imageViewer.src = "";
+              imageViewer.style.display = "none";
+            }
+            if (previewWrapper) {
+              previewWrapper.style.display = "none";
+            }
+            fileInput.value = "";
+            fileNameLabel.textContent = "";
+            if (closePdfBtn) {
+              closePdfBtn.style.display = "none";
+            }
+            if (selectBtn) {
+              selectBtn.style.display = "inline-flex";
+            }
+            if (poaStatus) {
+              poaStatus.className = "poa-status";
+              poaStatus.textContent = "";
+            }
+            isPOA = false;
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.remove("show");
+            // Clear analysis when file is removed
+            if (analysisMeta) {
+              analysisMeta.textContent = "";
+            }
+            if (analysisBody) {
+              analysisBody.textContent = "No analysis yet";
+              analysisBody.classList.add("analysis-empty");
+              analysisBody.classList.remove("analysis-analyzing");
+            }
+          });
+        }
+
+        // Drag to resize left (can only collapse, not grow beyond 230px)
+        if (dragLeft && columnLeft) {
+          dragLeft.addEventListener("mousedown", (e) => {
+            isResizingLeft = true;
+            startX = e.clientX;
+            startLeftWidth = columnLeft.getBoundingClientRect().width;
+            document.body.style.userSelect = "none";
+          });
+        }
+
+        // Drag to resize right (can grow and shrink within bounds)
+        if (dragRight && columnRight) {
+          dragRight.addEventListener("mousedown", (e) => {
+            isResizingRight = true;
+            startX = e.clientX;
+            startRightWidth = columnRight.getBoundingClientRect().width;
+            document.body.style.userSelect = "none";
+          });
+        }
+
+        window.addEventListener("mousemove", (e) => {
+          if (isResizingLeft && columnLeft) {
+            const dx = e.clientX - startX;
+            let newWidth = startLeftWidth + dx;
+            const maxWidth = 230;
+            const minWidth = 60;
+            if (newWidth > maxWidth) newWidth = maxWidth;
+            if (newWidth < minWidth) newWidth = minWidth;
+            columnLeft.style.width = newWidth + "px";
+            // Show only icons when width is 80px or less
+            if (newWidth <= 80) {
+              columnLeft.classList.add("icons-only");
+            } else {
+              columnLeft.classList.remove("icons-only");
+            }
+          } else if (isResizingRight && columnRight) {
+            const dx = e.clientX - startX;
+            let newWidth = startRightWidth - dx;
+            const minWidth = 260;
+            const maxWidth = 700;
+            if (newWidth < minWidth) newWidth = minWidth;
+            if (newWidth > maxWidth) newWidth = maxWidth;
+            columnRight.style.width = newWidth + "px";
+          }
+        });
+
+        window.addEventListener("mouseup", () => {
+          if (isResizingLeft || isResizingRight) {
+            isResizingLeft = false;
+            isResizingRight = false;
+            document.body.style.userSelect = "";
+          }
+        });
+
+        analyzeBtn.addEventListener("click", async () => {
+          const file = fileInput.files && fileInput.files[0];
+          if (!selectedState) {
+            if (stateError) {
+              stateError.textContent = "Select state first";
+            }
+            return;
+          }
+          if (!isPOA) {
+            if (stateError) {
+              stateError.textContent = "This file is not a POA";
+            }
+            return;
+          }
+
+          if (!file) {
+            if (stateError) {
+              stateError.textContent = "Select POA first";
+            }
+            return;
+          }
+          if (!isPOA) {
+            if (stateError) {
+              stateError.textContent = "This file is not a POA";
+            }
+            return;
+          }
+
+          // Clear all text and show analyzing with animated dots
+          analysisMeta.textContent = "";
+          analysisBody.className = "analysis-body analysis-analyzing";
+          analysisBody.innerHTML = "Analyzing<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>";
+
+          const formData = new FormData();
+          formData.append("state", selectedState);
+          formData.append("file", file);
+
+          try {
+            const resp = await fetch("http://localhost:5000/analyze-poa", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!resp.ok) {
+              const errText = await resp.text();
+              throw new Error(errText || "Backend error");
+            }
+
+            const data = await resp.json();
+            analysisMeta.textContent =
+              "Analysis for " + selectedState + " · " + file.name;
+            
+            console.log("Raw response data:", data);
+            let a = data.analysis;
+            console.log("Initial analysis value:", a, "Type:", typeof a);
+
+            // Accept both object and JSON string formats
+            if (a && typeof a === "string") {
+              try {
+                // Try to extract JSON from string if it has markdown code fences
+                let jsonStr = a.trim();
+                if (jsonStr.startsWith("```")) {
+                  const firstBrace = jsonStr.indexOf("{");
+                  const lastBrace = jsonStr.lastIndexOf("}");
+                  if (firstBrace !== -1 && lastBrace !== -1) {
+                    jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+                  }
+                }
+                a = JSON.parse(jsonStr);
+                console.log("Parsed from string:", a);
+              } catch (e) {
+                console.error("Failed to parse JSON string:", e, a);
+                // keep as string
+              }
+            }
+
+            // If still not an object, try parsing the entire response
+            if (!a || typeof a !== "object") {
+              console.log("Analysis is not an object, attempting to parse response directly");
+              try {
+                const responseText = await resp.text();
+                const responseData = JSON.parse(responseText);
+                a = responseData.analysis;
+                if (a && typeof a === "string") {
+                  let jsonStr = a.trim();
+                  if (jsonStr.startsWith("```")) {
+                    const firstBrace = jsonStr.indexOf("{");
+                    const lastBrace = jsonStr.lastIndexOf("}");
+                    if (firstBrace !== -1 && lastBrace !== -1) {
+                      jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+                    }
+                  }
+                  a = JSON.parse(jsonStr);
+                }
+                console.log("Re-parsed analysis:", a);
+              } catch (e) {
+                console.error("Failed to re-parse:", e);
+              }
+            }
+
+            if (!a || typeof a !== "object" || Array.isArray(a)) {
+              console.error("Final analysis is not a valid object:", a);
+              analysisBody.textContent =
+                typeof a === "string"
+                  ? a
+                  : "The analysis service returned an unexpected format. Check console for details.";
+              analysisBody.classList.add("analysis-empty");
+            } else {
+              console.log("Successfully parsed analysis object:", a);
+              analysisBody.classList.remove("analysis-empty", "analysis-analyzing");
+
+              // Helper to escape HTML and handle undefined/null
+              const escapeHtml = (text) => {
+                if (text == null) return "";
+                const div = document.createElement("div");
+                div.textContent = String(text);
+                return div.innerHTML;
+              };
+
+              const strengths =
+                Array.isArray(a.strengths) && a.strengths.length
+                  ? a.strengths
+                  : ["No clear strengths identified."];
+              const issues =
+                Array.isArray(a.issues) && a.issues.length
+                  ? a.issues
+                  : ["No major issues identified."];
+              const recs =
+                Array.isArray(a.recommendations) && a.recommendations.length
+                  ? a.recommendations
+                  : [];
+
+              // Extract fields
+              const fields = a.extractedFields || {};
+              const principalAddress = escapeHtml(fields.principalAddress || "Not found");
+              const agentAddress = escapeHtml(fields.agentAddress || "Not found");
+              const principalName = escapeHtml(fields.principalName || "Not found");
+              const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
+              const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
+              const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
+              const executionDate = escapeHtml(fields.executionDate || "Not found");
+              const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
+              const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
+
+              const summary = escapeHtml(a.summary || "No summary provided.");
+              const overall = escapeHtml(
+                a.overallAssessment || "No overall assessment provided."
+              );
+              const disclaimer = escapeHtml(
+                a.disclaimer ||
+                  "This is not legal advice. Please consult a licensed attorney in the relevant state."
+              );
+
+              analysisBody.innerHTML = `
+                <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                  <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+                  <div style="display: grid; gap: 12px;">
+                    <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
+                    <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
+                    <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+                    <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
+                    <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
+                    <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
+                    <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
+                    <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
+                    <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+                  </div>
+                </div>
+                <div style="margin-bottom: 12px; margin-top: 20px;"><strong style="color: #111827;">Summary:</strong> <span style="color: #374151;">${summary}</span></div>
+                <div style="margin-bottom: 12px;"><strong style="color: #111827;">Overall Assessment:</strong> <span style="color: #374151;">${overall}</span></div>
+                <div class="analysis-grid" style="margin-top: 12px;">
+                  <div class="analysis-block analysis-good">
+                    <div class="analysis-block-title" style="color: #166534; font-weight: 600; margin-bottom: 8px;">✓ What Looks Good</div>
+                    <ul class="analysis-list" style="color: #374151;">
+                      ${strengths
+                        .map((item) => `<li style="margin-bottom: 6px;">${escapeHtml(item)}</li>`)
+                        .join("")}
+                    </ul>
+                  </div>
+                  <div class="analysis-block analysis-issues">
+                    <div class="analysis-block-title" style="color: #991b1b; font-weight: 600; margin-bottom: 8px;">⚠ What May Need Fixing</div>
+                    <ul class="analysis-list" style="color: #374151;">
+                      ${issues
+                        .map((item) => `<li style="margin-bottom: 6px;">${escapeHtml(item)}</li>`)
+                        .join("")}
+                    </ul>
+                  </div>
+                </div>
+                ${
+                  recs.length
+                    ? `<div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb;"><strong style="color: #111827;">Recommendations:</strong>
+                         <ul class="analysis-list" style="color: #374151; margin-top: 8px;">
+                           ${recs.map((r) => `<li style="margin-bottom: 6px;">${escapeHtml(r)}</li>`).join("")}
+                         </ul>
+                       </div>`
+                    : ""
+                }
+                <div class="analysis-disclaimer" style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #d1d5db; color: #6b7280; font-size: 11px;">${disclaimer}</div>
+              `;
+            }
+          } catch (err) {
+            analysisMeta.textContent = "Analysis failed";
+            analysisBody.textContent =
+              "There was a problem contacting the analysis service.\n\n" +
+              (err && err.message ? err.message : "Unknown error.");
+          }
+
+          analysisSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+          }
+        });
+      })();
+    </script>
+  </body>
+  </html>
+
+

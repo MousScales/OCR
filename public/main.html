@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Document Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #e5e7eb;
+        color: #111827;
+        display: flex;
+        min-height: 100vh;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .card {
+        display: flex;
+        flex: 1;
+        width: 100%;
+        max-width: none;
+        height: 100vh;
+        box-sizing: border-box;
+        padding: 0;
+        background: transparent;
+        box-shadow: none;
+        border: none;
+      }
+
+      .main-layout {
+        display: flex;
+        align-items: stretch;
+        width: 100%;
+        padding: 0;
+        border-left: 1px solid rgba(31, 41, 55, 1);
+        border-right: 1px solid rgba(31, 41, 55, 1);
+      }
+
+      .column {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .column-center {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        padding: 40px;
+        overflow-y: auto;
+      }
+
+      h1 {
+        margin: 0 0 32px;
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #111827;
+      }
+
+      .sections-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px;
+        margin-bottom: 40px;
+      }
+
+      .section-card {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 24px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .section-card:hover {
+        border-color: #d1d5db;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      .section-card.active {
+        border-color: #1d4ed8;
+        box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .section-count {
+        background: #1d4ed8;
+        color: #ffffff;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .documents-list {
+        flex: 1;
+        min-height: 100px;
+      }
+
+      .document-item {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: background 0.12s ease;
+      }
+
+      .document-item:hover {
+        background: #f3f4f6;
+      }
+
+      .document-name {
+        font-size: 13px;
+        color: #374151;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .document-date {
+        font-size: 12px;
+        color: #6b7280;
+        margin-left: 12px;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #9ca3af;
+        font-size: 13px;
+      }
+
+      .add-button {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #1d4ed8;
+        color: #ffffff;
+        border: none;
+        font-size: 28px;
+        cursor: pointer;
+        box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+        transition: transform 0.12s ease-out, box-shadow 0.12s ease-out,
+          filter 0.12s ease-out, opacity 0.2s ease-out;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+      }
+
+      .add-button.show {
+        display: flex;
+        opacity: 1;
+      }
+
+      .add-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.35);
+        filter: brightness(1.02);
+      }
+
+      .add-button:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25);
+      }
+
+      @media (max-width: 960px) {
+        .card {
+          height: auto;
+        }
+
+        .column-center {
+          padding: 24px 16px;
+        }
+
+        .sections-grid {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+
+        .add-button {
+          bottom: 20px;
+          right: 20px;
+          width: 48px;
+          height: 48px;
+          font-size: 24px;
+        }
+      }
+
+      .pin-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+
+      .pin-container {
+        background: #ffffff;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+      }
+
+      .pin-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+
+      .pin-subtitle {
+        font-size: 14px;
+        color: #6b7280;
+        margin-bottom: 24px;
+      }
+
+      .pin-input {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 18px;
+        text-align: center;
+        letter-spacing: 8px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s ease;
+        font-family: monospace;
+        margin-bottom: 16px;
+      }
+
+      .pin-input:focus {
+        border-color: #1d4ed8;
+      }
+
+      .pin-error {
+        color: #b91c1c;
+        font-size: 13px;
+        margin-bottom: 16px;
+        min-height: 20px;
+        display: none;
+      }
+
+      .pin-error.show {
+        display: block;
+      }
+
+      .pin-submit {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #ffffff;
+        background: #1d4ed8;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .pin-submit:hover {
+        background: #1e40af;
+      }
+
+      .pin-submit:active {
+        background: #1e3a8a;
+      }
+
+      .main-content {
+        display: none;
+      }
+
+      .main-content.authenticated {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- PIN Entry Overlay -->
+    <div class="pin-overlay" id="pin-overlay">
+      <div class="pin-container">
+        <div class="pin-title">Enter PIN</div>
+        <div class="pin-subtitle">Please enter your PIN to access the site</div>
+        <input
+          type="password"
+          class="pin-input"
+          id="pin-input"
+          placeholder="Enter PIN"
+          maxlength="10"
+          autocomplete="off"
+        />
+        <div class="pin-error" id="pin-error">Incorrect PIN. Please try again.</div>
+        <button class="pin-submit" id="pin-submit">Submit</button>
+      </div>
+    </div>
+
+    <div class="card main-content" id="main-content">
+      <div class="main-layout">
+        <div class="column column-center">
+          <h1>Document Manager</h1>
+          
+          <div class="sections-grid">
+            <div class="section-card" data-section="poa">
+              <div class="section-header">
+                <div class="section-title">POA</div>
+                <div class="section-count" id="poa-count">0</div>
+              </div>
+              <div class="documents-list" id="poa-documents">
+                <div class="empty-state">No documents yet</div>
+              </div>
+            </div>
+
+            <div class="section-card" data-section="section2">
+              <div class="section-header">
+                <div class="section-title">Section 2</div>
+                <div class="section-count" id="section2-count">0</div>
+              </div>
+              <div class="documents-list" id="section2-documents">
+                <div class="empty-state">No documents yet</div>
+              </div>
+            </div>
+
+            <div class="section-card" data-section="section3">
+              <div class="section-header">
+                <div class="section-title">Section 3</div>
+                <div class="section-count" id="section3-count">0</div>
+              </div>
+              <div class="documents-list" id="section3-documents">
+                <div class="empty-state">No documents yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="add-button" id="add-button" title="Add Document">+</button>
+
+    <script>
+      // PIN Authentication
+      const CORRECT_PIN = "11335";
+      const PIN_KEY = "site_authenticated";
+
+      // Check if user is authenticated
+      function checkAuthentication() {
+        const authenticated = sessionStorage.getItem(PIN_KEY) === "true";
+        if (authenticated) {
+          document.getElementById("pin-overlay").style.display = "none";
+          document.getElementById("main-content").classList.add("authenticated");
+        } else {
+          document.getElementById("pin-overlay").style.display = "flex";
+          document.getElementById("main-content").classList.remove("authenticated");
+        }
+      }
+
+      // Handle PIN submission
+      function handlePinSubmit() {
+        const pinInput = document.getElementById("pin-input");
+        const pinError = document.getElementById("pin-error");
+        const enteredPin = pinInput.value;
+
+        if (enteredPin === CORRECT_PIN) {
+          sessionStorage.setItem(PIN_KEY, "true");
+          pinError.classList.remove("show");
+          pinInput.value = "";
+          checkAuthentication();
+        } else {
+          pinError.classList.add("show");
+          pinInput.value = "";
+          pinInput.focus();
+        }
+      }
+
+      // Initialize PIN authentication
+      document.getElementById("pin-submit").addEventListener("click", handlePinSubmit);
+      document.getElementById("pin-input").addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          handlePinSubmit();
+        }
+      });
+
+      // Check authentication on page load
+      checkAuthentication();
+
+      // Initialize storage keys for each section
+      const SECTIONS = ["poa", "section2", "section3"];
+
+      // Load documents from localStorage
+      function loadDocuments() {
+        SECTIONS.forEach((section) => {
+          const documents = JSON.parse(
+            localStorage.getItem(`${section}_documents`) || "[]"
+          );
+          displayDocuments(section, documents);
+        });
+      }
+
+      // Display documents for a section
+      function displayDocuments(section, documents) {
+        const container = document.getElementById(`${section}-documents`);
+        const countElement = document.getElementById(`${section}-count`);
+
+        countElement.textContent = documents.length;
+
+        if (documents.length === 0) {
+          container.innerHTML = '<div class="empty-state">No documents yet</div>';
+          return;
+        }
+
+        container.innerHTML = documents
+          .map((doc, index) => {
+            const date = new Date(doc.date).toLocaleDateString();
+            return `
+                    <div class="document-item">
+                        <div class="document-name">${escapeHtml(doc.name)}</div>
+                        <div class="document-date">${date}</div>
+                    </div>
+                `;
+          })
+          .join("");
+      }
+
+      // Escape HTML to prevent XSS
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Handle section card clicks
+      const addButton = document.getElementById("add-button");
+      document.querySelectorAll(".section-card").forEach((card) => {
+        card.addEventListener("click", function () {
+          // Remove active class from all cards
+          document
+            .querySelectorAll(".section-card")
+            .forEach((c) => c.classList.remove("active"));
+          // Add active class to clicked card
+          this.classList.add("active");
+          
+          // Show plus button only for POA section
+          const section = this.getAttribute("data-section");
+          if (section === "poa") {
+            addButton.classList.add("show");
+          } else {
+            addButton.classList.remove("show");
+          }
+        });
+      });
+
+      // Handle add button click - navigate to index.html
+      document.getElementById("add-button").addEventListener("click", function () {
+        window.location.href = "index.html";
+      });
+
+      // Listen for storage events (in case documents are added from another tab)
+      window.addEventListener("storage", function (e) {
+        if (e.key && e.key.endsWith("_documents")) {
+          const section = e.key.replace("_documents", "");
+          const documents = JSON.parse(e.newValue || "[]");
+          displayDocuments(section, documents);
+        }
+      });
+
+      // Load documents on page load
+      loadDocuments();
+
+      // Also check for documents added in the same session
+      // This will be called when returning from index.html
+      window.addEventListener("focus", loadDocuments);
+    </script>
+  </body>
+</html>
