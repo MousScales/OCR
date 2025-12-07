@@ -194,20 +194,19 @@ async function loadDocument(docId, docName, docType) {
               base64Data = base64Data.split(',')[1];
             }
             
-            // Remove any whitespace/newlines
-            base64Data = base64Data.replace(/\s/g, '');
+            // Remove any whitespace/newlines that might cause issues
+            base64Data = base64Data.replace(/[\s\n\r\t]/g, '');
             
-            // More lenient base64 validation - allow padding and common characters
+            // Basic validation - just check it's not empty
             if (base64Data.length === 0) {
               throw new Error('File data is empty');
             }
             
-            // Try to decode to verify it's valid base64
-            try {
-              atob(base64Data.substring(0, 100)); // Test decode first 100 chars
-            } catch (e) {
-              console.error('Base64 decode test failed:', e);
-              // Still try to use it - might work anyway
+            // Check if it looks like base64 (has valid base64 characters)
+            // But don't fail if it doesn't - browsers are more lenient
+            const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
+            if (!base64Pattern.test(base64Data.substring(0, 1000))) {
+              console.warn('⚠️ Base64 data may have invalid characters, but attempting to use it anyway');
             }
             
             // Create proper data URL
