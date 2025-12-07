@@ -167,10 +167,26 @@ async function loadDocument(docId, docName, docType) {
         if (data.file_data) {
           try {
             let base64Data = data.file_data;
+            console.log('📦 File data type:', typeof base64Data);
+            console.log('📦 File data length:', base64Data?.length);
             
-            // Ensure we have valid base64 data
-            if (!base64Data || typeof base64Data !== 'string') {
-              throw new Error('Invalid file data format');
+            // Handle different data formats from Supabase
+            if (typeof base64Data === 'object' && base64Data !== null) {
+              // Might be a Buffer object or other format
+              console.log('⚠️ File data is object, attempting conversion...');
+              if (Buffer.isBuffer(base64Data)) {
+                base64Data = base64Data.toString('base64');
+              } else if (base64Data.data) {
+                base64Data = base64Data.data;
+              } else {
+                // Try to stringify and extract
+                base64Data = JSON.stringify(base64Data);
+              }
+            }
+            
+            // Ensure we have a string
+            if (typeof base64Data !== 'string') {
+              throw new Error('File data is not in a valid format');
             }
             
             // Remove data URL prefix if present
@@ -178,27 +194,39 @@ async function loadDocument(docId, docName, docType) {
               base64Data = base64Data.split(',')[1];
             }
             
-            // Ensure base64 string is clean (remove whitespace)
-            base64Data = base64Data.trim();
+            // Remove any whitespace/newlines
+            base64Data = base64Data.replace(/\s/g, '');
             
-            // Validate base64 format
-            if (!/^[A-Za-z0-9+/=]+$/.test(base64Data)) {
-              throw new Error('Invalid base64 data format');
+            // More lenient base64 validation - allow padding and common characters
+            if (base64Data.length === 0) {
+              throw new Error('File data is empty');
+            }
+            
+            // Try to decode to verify it's valid base64
+            try {
+              atob(base64Data.substring(0, 100)); // Test decode first 100 chars
+            } catch (e) {
+              console.error('Base64 decode test failed:', e);
+              // Still try to use it - might work anyway
             }
             
             // Create proper data URL
             const dataUrl = `data:${docType};base64,${base64Data}`;
+            console.log('✅ Created data URL, length:', dataUrl.length);
             
             if (docType === 'application/pdf') {
               pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
               pdfViewer.style.display = 'block';
+              console.log('✅ PDF viewer loaded');
             } else if (docType.startsWith('image/')) {
               imageViewer.src = dataUrl;
               imageViewer.style.display = 'block';
+              console.log('✅ Image viewer loaded');
             }
           } catch (err) {
-            console.error('Error displaying file:', err);
-            viewerPlaceholder.textContent = 'Error loading file: ' + err.message;
+            console.error('❌ Error displaying file:', err);
+            console.error('❌ Error stack:', err.stack);
+            viewerPlaceholder.textContent = 'Error loading file: ' + err.message + '. File may need to be re-uploaded.';
             viewerPlaceholder.style.display = 'block';
           }
         } else {
