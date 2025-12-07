@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "npx live-server public --port=5500",
-    "server": "node server.js"
+    "server": "node server.js",
+    "build": "echo 'No build step required for static files'"
   },
   "author": "",
   "license": "MIT",
