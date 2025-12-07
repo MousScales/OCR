@@ -11,23 +11,23 @@ async function extractTextFromFile(file) {
 
   if (isPDF) {
     try {
+      console.log('📄 Processing PDF...');
       const pdfData = await pdfParse(file.buffer);
       text = pdfData?.text || "";
+      console.log('✅ PDF processed, text length:', text.length);
     } catch (parseError) {
-      console.error("PDF parse error:", parseError);
+      console.error("❌ PDF parse error:", parseError);
       throw new Error("Could not parse PDF file.");
     }
   } else if (isImage) {
     try {
-      console.log('🖼️ Starting image OCR processing...');
-      // Aggressively optimize image for fast OCR
-      let processedImage = file.buffer;
+      console.log('🖼️ Processing image for OCR...');
       
       // Get image metadata
       const metadata = await sharp(file.buffer).metadata();
-      console.log('📐 Original dimensions:', metadata.width, 'x', metadata.height);
+      console.log('📐 Original size:', metadata.width, 'x', metadata.height);
       
-      // Aggressively resize to max 1000px for much faster OCR
+      // Resize to max 1000px for speed
       const maxDimension = 1000;
       let targetWidth = metadata.width;
       let targetHeight = metadata.height;
@@ -36,58 +36,55 @@ async function extractTextFromFile(file) {
         const ratio = Math.min(maxDimension / metadata.width, maxDimension / metadata.height);
         targetWidth = Math.round(metadata.width * ratio);
         targetHeight = Math.round(metadata.height * ratio);
-        console.log('🔄 Resizing to:', targetWidth, 'x', targetHeight, 'for faster OCR');
+        console.log('🔄 Resizing to:', targetWidth, 'x', targetHeight);
       }
       
-      // Process image with aggressive optimization
-      processedImage = await sharp(file.buffer)
+      // Process image
+      const processedImage = await sharp(file.buffer)
         .resize(targetWidth, targetHeight, {
           fit: 'inside',
           withoutEnlargement: true
         })
-        .greyscale() // Convert to greyscale
-        .normalize() // Normalize contrast
-        .sharpen({ sigma: 1 }) // Light sharpen
+        .greyscale()
+        .normalize()
+        .sharpen({ sigma: 1 })
         .toBuffer();
       
-      console.log('🔤 Starting OCR recognition with fast settings...');
+      console.log('🔤 Running OCR...');
       
-      // Use fastest OCR settings possible
+      // OCR with timeout
       const ocrPromise = Tesseract.recognize(processedImage, 'eng', {
         logger: () => {}, // Disable logging for speed
-        // Fastest settings
-        tessedit_pageseg_mode: '6', // Assume uniform block of text (fastest)
-        tessedit_ocr_engine_mode: '1', // LSTM only (faster than legacy)
-        // Remove whitelist to speed up (less processing)
+        tessedit_pageseg_mode: '6', // Uniform block (fastest)
+        tessedit_ocr_engine_mode: '1' // LSTM only
       });
       
-      // Shorter timeout - 15 seconds max
       const ocrTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('OCR processing timeout - image may be too complex')), 15000)
+        setTimeout(() => reject(new Error('OCR timeout')), 12000)
       );
       
       const result = await Promise.race([ocrPromise, ocrTimeout]);
       text = result.data?.text || "";
       
       if (!text || text.trim().length === 0) {
-        console.warn('⚠️ OCR returned no text, trying with different settings...');
-        // Fallback: try with different page segmentation
+        // Try fallback with different settings
+        console.log('⚠️ No text found, trying fallback...');
         const fallbackResult = await Promise.race([
           Tesseract.recognize(processedImage, 'eng', {
-            tessedit_pageseg_mode: '1', // Auto with OSD
+            tessedit_pageseg_mode: '1' // Auto with OSD
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Fallback OCR timeout')), 10000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Fallback timeout')), 8000))
         ]);
         text = fallbackResult.data?.text || "";
       }
       
-      console.log('✅ OCR completed, extracted', text.length, 'characters');
+      console.log('✅ OCR complete, text length:', text.length);
     } catch (ocrError) {
       console.error("❌ OCR error:", ocrError);
       throw new Error("Could not extract text from image: " + (ocrError.message || "Unknown error"));
     }
   } else {
-    throw new Error("File must be a PDF or image (PNG, JPG, etc.). Received: " + file.mimetype);
+    throw new Error("File must be a PDF or image. Received: " + file.mimetype);
   }
 
   if (!text || text.trim().length === 0) {
