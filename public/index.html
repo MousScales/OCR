@@ -1290,15 +1290,23 @@
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-            // Use relative API path for Vercel, localhost for local dev
-            const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-              ? 'http://localhost:5000'
-              : '';
-            const resp = await fetch(`${apiUrl}/api/check-poa`, {
+            // Use correct API path: localhost uses /check-poa, Vercel uses /api/check-poa
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const apiUrl = isLocal ? 'http://localhost:5000' : '';
+            const endpoint = isLocal ? '/check-poa' : '/api/check-poa';
+            const fullUrl = `${apiUrl}${endpoint}`;
+            
+            console.log('🔍 Checking if document is POA...');
+            console.log('📍 API URL:', fullUrl);
+            console.log('📄 File:', file.name, 'Type:', file.type, 'Size:', file.size);
+            
+            const resp = await fetch(fullUrl, {
               method: "POST",
               body: formData,
               signal: controller.signal,
             });
+            
+            console.log('📡 Response status:', resp.status, resp.statusText);
 
             clearTimeout(timeoutId);
 
