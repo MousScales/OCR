@@ -1607,11 +1607,8 @@
           formData.append("file", file);
 
           try {
-            // Use correct API path: localhost uses /analyze-poa, Vercel uses /api/analyze-poa
-            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            const apiUrl = isLocal ? 'http://localhost:5000' : '';
-            const endpoint = isLocal ? '/analyze-poa' : '/api/analyze-poa';
-            const fullUrl = `${apiUrl}${endpoint}`;
+            // Always use /api/analyze-poa - works with both Vercel dev and production
+            const fullUrl = '/api/analyze-poa';
             
             console.log('🔬 Starting POA analysis...');
             console.log('📍 API URL:', fullUrl);

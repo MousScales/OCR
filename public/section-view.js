@@ -358,11 +358,7 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
     formData.append('state', selectedState);
     formData.append('file', file);
 
-    const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:5000'
-      : '';
-
-    const resp = await fetch(`${apiUrl}/api/analyze-poa`, {
+    const resp = await fetch('/api/analyze-poa', {
       method: 'POST',
       body: formData
     });

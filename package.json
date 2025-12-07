@@ -4,8 +4,8 @@
   "description": "POA PDF preview and analysis app",
   "main": "server.js",
   "scripts": {
-    "start": "npx live-server public --port=5500",
-    "server": "node server.js",
+    "dev": "vercel dev",
+    "start": "vercel dev",
     "build": "echo 'No build step required for static files'"
   },
   "author": "",
