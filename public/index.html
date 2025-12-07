@@ -1288,10 +1288,15 @@
 
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            // Longer timeout for Vercel (60 seconds) since OCR can take time
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const timeoutDuration = isLocal ? 30000 : 55000; // 30s local, 55s Vercel (leaving buffer)
+            const timeoutId = setTimeout(() => {
+              console.warn('⏱️ Client timeout reached, aborting request');
+              controller.abort();
+            }, timeoutDuration);
 
             // Use correct API path: localhost uses /check-poa, Vercel uses /api/check-poa
-            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             const apiUrl = isLocal ? 'http://localhost:5000' : '';
             const endpoint = isLocal ? '/check-poa' : '/api/check-poa';
             const fullUrl = `${apiUrl}${endpoint}`;
@@ -1299,6 +1304,7 @@
             console.log('🔍 Checking if document is POA...');
             console.log('📍 API URL:', fullUrl);
             console.log('📄 File:', file.name, 'Type:', file.type, 'Size:', file.size);
+            console.log('⏱️ Timeout set to:', timeoutDuration / 1000, 'seconds');
             
             const resp = await fetch(fullUrl, {
               method: "POST",
@@ -1306,6 +1312,7 @@
               signal: controller.signal,
             });
             
+            clearTimeout(timeoutId);
             console.log('📡 Response status:', resp.status, resp.statusText);
 
             clearTimeout(timeoutId);

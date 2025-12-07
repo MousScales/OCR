@@ -115,15 +115,18 @@ module.exports = async (req, res) => {
   }
 
   // Set a timeout for the entire function
+  // Vercel free tier has 10s limit, Pro has up to 60s
+  // We'll use 55s to leave buffer
   const functionTimeout = setTimeout(() => {
     if (!res.headersSent) {
+      console.error('⏱️ Function timeout reached');
       res.status(504).json({
         isPOA: false,
         poaType: null,
-        error: "Request timed out. The file may be too large or processing took too long.",
+        error: "Request timed out. The file may be too large or processing took too long. Try a smaller file or upgrade to Vercel Pro for longer timeouts.",
       });
     }
-  }, 50000); // 50 seconds (leaving 10s buffer for Vercel)
+  }, 55000); // 55 seconds (leaving 5s buffer for Vercel)
 
   try {
     const { file } = await parseMultipartFormData(req);
