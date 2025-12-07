@@ -956,7 +956,7 @@
           try {
             const { data, error } = await supabase
               .from('documents')
-              .select('file_data, analysis_data')
+              .select('file_path, file_data, analysis_data')
               .eq('id', docId)
               .single();
 
@@ -967,40 +967,47 @@
                 name: docName,
                 type: docType,
                 section: docSection,
-                fileData: data.file_data || null
+                filePath: data.file_path || null,
+                fileData: data.file_data || null // Keep for backward compatibility
               };
 
-              // Display file if available
-              if (data.file_data) {
+              // Display file - prefer Storage URL over base64
+              let fileUrl = null;
+              
+              if (data.file_path) {
+                // Use Supabase Storage public URL
+                console.log('📦 Loading file from Storage:', data.file_path);
+                const { data: urlData } = supabase.storage
+                  .from('documents')
+                  .getPublicUrl(data.file_path);
+                
+                fileUrl = urlData.publicUrl;
+                console.log('✅ Storage URL:', fileUrl);
+              } else if (data.file_data) {
+                // Fallback to base64 for old documents
+                console.log('📦 Loading file from base64 (legacy)');
                 try {
                   let base64Data = data.file_data;
                   
-                  // Ensure we have valid base64 data
-                  if (!base64Data || typeof base64Data !== 'string') {
-                    throw new Error('Invalid file data format');
+                  if (typeof base64Data === 'string') {
+                    if (base64Data.includes(',')) {
+                      base64Data = base64Data.split(',')[1];
+                    }
+                    base64Data = base64Data.replace(/[\s\n\r\t]/g, '');
+                    fileUrl = `data:${docType};base64,${base64Data}`;
                   }
-                  
-                  // Remove data URL prefix if present
-                  if (base64Data.includes(',')) {
-                    base64Data = base64Data.split(',')[1];
-                  }
-                  
-                  // Ensure base64 string is clean (remove whitespace)
-                  base64Data = base64Data.trim();
-                  
-                  // Validate base64 format
-                  if (!/^[A-Za-z0-9+/=]+$/.test(base64Data)) {
-                    throw new Error('Invalid base64 data format');
-                  }
-                  
-                  // Create proper data URL
-                  const dataUrl = `data:${docType};base64,${base64Data}`;
-                  
+                } catch (err) {
+                  console.error('Error processing base64:', err);
+                }
+              }
+              
+              if (fileUrl) {
+                try {
                   if (docType === 'application/pdf') {
-                    pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
+                    pdfViewer.src = fileUrl + '#toolbar=0&navpanes=0&scrollbar=0';
                     pdfViewer.style.display = 'block';
                   } else if (docType.startsWith('image/')) {
-                    imageViewer.src = dataUrl;
+                    imageViewer.src = fileUrl;
                     imageViewer.style.display = 'block';
                   }
                 } catch (err) {
@@ -1009,7 +1016,7 @@
                   viewerPlaceholder.style.display = 'block';
                 }
               } else {
-                viewerPlaceholder.textContent = 'File content not available. File may have been too large to store. You can still run analysis if you upload the file again.';
+                viewerPlaceholder.textContent = 'File content not available. You can still run analysis if you upload the file again.';
                 viewerPlaceholder.style.display = 'block';
               }
 
