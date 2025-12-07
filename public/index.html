@@ -1071,11 +1071,15 @@
         let startLeftWidth = 0;
         let startRightWidth = 0;
 
+        // Get section from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentSection = urlParams.get('section') || 'poa';
+
         // Function to save document to Supabase and localStorage
         async function saveDocumentToStorage(file) {
           try {
             // Save to localStorage (fallback)
-            const documents = JSON.parse(localStorage.getItem('poa_documents') || '[]');
+            const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
             const documentInfo = {
               name: file.name,
               type: file.type,
@@ -1087,7 +1091,7 @@
             const exists = documents.some(doc => doc.name === file.name && doc.date === documentInfo.date);
             if (!exists) {
               documents.push(documentInfo);
-              localStorage.setItem('poa_documents', JSON.stringify(documents));
+              localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
             }
 
             // Save to Supabase if available
@@ -1107,7 +1111,7 @@
                       name: file.name,
                       type: file.type,
                       size: file.size,
-                      section: 'poa', // Default to POA section
+                      section: currentSection, // Use section from URL
                       file_data: base64Data, // Store as base64 string
                       created_at: new Date().toISOString()
                     }
@@ -1136,7 +1140,7 @@
                     name: file.name,
                     type: file.type,
                     size: file.size,
-                    section: 'poa',
+                    section: currentSection, // Use section from URL
                     created_at: new Date().toISOString()
                   }
                 ])

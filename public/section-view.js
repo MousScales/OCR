@@ -426,6 +426,12 @@ document.getElementById('back-to-main-btn').addEventListener('click', function()
   window.location.href = 'main.html';
 });
 
+// Add document button
+document.getElementById('add-document-btn').addEventListener('click', function() {
+  // Navigate to index.html with section parameter
+  window.location.href = `index.html?section=${section}`;
+});
+
 // Helper functions
 function escapeHtml(text) {
   const div = document.createElement("div");
