@@ -1138,8 +1138,8 @@
           return;
         }
 
-        // If file data is not available, prompt user to upload file
-        if (!window.currentDocument.fileData) {
+        // Check if we have file path (Storage) or file data (base64)
+        if (!window.currentDocument.filePath && !window.currentDocument.fileData) {
           const uploadFile = confirm('File content not available. Would you like to upload the file again to run analysis?');
           if (uploadFile) {
             window.location.href = 'index.html';
@@ -1155,28 +1155,40 @@
         analysisMeta.textContent = '';
 
         try {
-          // Convert base64 to blob
-          let base64Data = window.currentDocument.fileData;
+          let file;
           
-          // Handle different base64 formats
-          if (typeof base64Data !== 'string') {
-            // If it's already a buffer or object, we can't use it
-            throw new Error('File data not available in correct format');
+          if (window.currentDocument.filePath) {
+            // Download file from Storage
+            console.log('📥 Downloading file from Storage:', window.currentDocument.filePath);
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('documents')
+              .download(window.currentDocument.filePath);
+            
+            if (downloadError) {
+              throw new Error('Failed to download file: ' + downloadError.message);
+            }
+            
+            file = new File([fileData], window.currentDocument.name, { type: window.currentDocument.type });
+            console.log('✅ File downloaded from Storage');
+          } else if (window.currentDocument.fileData) {
+            // Fallback: convert base64 to file
+            console.log('📥 Converting base64 to file (legacy)');
+            let base64Data = window.currentDocument.fileData;
+            if (base64Data.includes(',')) {
+              base64Data = base64Data.split(',')[1];
+            }
+            
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: window.currentDocument.type });
+            file = new File([blob], window.currentDocument.name, { type: window.currentDocument.type });
+          } else {
+            throw new Error('No file data available');
           }
-          
-          // Remove data URL prefix if present
-          if (base64Data.includes(',')) {
-            base64Data = base64Data.split(',')[1];
-          }
-          
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: window.currentDocument.type });
-          const file = new File([blob], window.currentDocument.name, { type: window.currentDocument.type });
 
           const formData = new FormData();
           formData.append('state', selectedState);
