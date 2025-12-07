@@ -1305,15 +1305,36 @@
             console.log('📍 API URL:', fullUrl);
             console.log('📄 File:', file.name, 'Type:', file.type, 'Size:', file.size);
             console.log('⏱️ Timeout set to:', timeoutDuration / 1000, 'seconds');
+            console.log('🌐 Current hostname:', window.location.hostname);
+            console.log('🌐 Current origin:', window.location.origin);
             
-            const resp = await fetch(fullUrl, {
-              method: "POST",
-              body: formData,
-              signal: controller.signal,
-            });
+            const startTime = Date.now();
+            console.log('⏰ Request started at:', new Date().toISOString());
+            
+            let resp;
+            try {
+              resp = await fetch(fullUrl, {
+                method: "POST",
+                body: formData,
+                signal: controller.signal,
+              });
+              
+              const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+              console.log(`✅ Request completed in ${elapsed} seconds`);
+              console.log('📡 Response status:', resp.status, resp.statusText);
+              console.log('📡 Response headers:', Object.fromEntries(resp.headers.entries()));
+            } catch (fetchError) {
+              const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+              console.error('❌ Fetch error after', elapsed, 'seconds:', fetchError);
+              console.error('❌ Fetch error details:', {
+                name: fetchError.name,
+                message: fetchError.message,
+                stack: fetchError.stack
+              });
+              throw fetchError;
+            }
             
             clearTimeout(timeoutId);
-            console.log('📡 Response status:', resp.status, resp.statusText);
 
             clearTimeout(timeoutId);
 
