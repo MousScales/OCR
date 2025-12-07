@@ -55,6 +55,207 @@
         overflow-y: auto;
       }
 
+      .document-viewer-layout {
+        display: none;
+        flex: 1;
+        width: 100%;
+        gap: 0;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-top: 24px;
+      }
+
+      .document-viewer-layout.active {
+        display: flex;
+      }
+
+      .viewer-left {
+        flex: 1;
+        min-width: 0;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid #e5e7eb;
+      }
+
+      .viewer-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f9fafb;
+      }
+
+      .viewer-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .close-viewer-btn {
+        background: transparent;
+        border: none;
+        color: #b91c1c;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+      }
+
+      .close-viewer-btn:hover {
+        background: #fee2e2;
+      }
+
+      .viewer-content {
+        flex: 1;
+        overflow: auto;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f9fafb;
+      }
+
+      .viewer-content iframe,
+      .viewer-content img {
+        max-width: 100%;
+        max-height: 100%;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .viewer-right {
+        width: 400px;
+        background: #f3f4f6;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+
+      .analysis-section {
+        margin-top: 0;
+        padding: 10px 12px;
+        background: transparent;
+        border: none;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .analysis-title {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 6px;
+        color: #111827;
+        text-align: center;
+      }
+
+      .analysis-meta {
+        font-size: 12px;
+        color: #4b5563;
+        margin-bottom: 8px;
+      }
+
+      .analysis-body {
+        font-size: 13px;
+        color: #111827;
+        white-space: normal;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+      }
+
+      .analysis-empty {
+        color: #6b7280;
+        font-style: italic;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+      }
+
+      .analysis-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .analysis-block {
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        border: none;
+        background: transparent;
+      }
+
+      .analysis-block-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+      }
+
+      .analysis-good .analysis-block-title {
+        color: #166534;
+      }
+
+      .analysis-issues .analysis-block-title {
+        color: #991b1b;
+      }
+
+      .analysis-list {
+        padding-left: 16px;
+        margin: 0;
+      }
+
+      .analysis-list li {
+        margin-bottom: 4px;
+      }
+
+      .analysis-disclaimer {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #6b7280;
+        border-top: 1px dashed rgba(148, 163, 184, 0.4);
+        padding-top: 8px;
+      }
+
+      .pdf-viewer {
+        display: none;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #ffffff;
+      }
+
+      .image-viewer {
+        display: none;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        background: #ffffff;
+      }
+
+      .document-item {
+        cursor: pointer;
+      }
+
+      .document-item:hover {
+        background: #f3f4f6;
+        border-color: #d1d5db;
+      }
+
+      .document-item.active {
+        background: #dbeafe;
+        border-color: #1d4ed8;
+      }
+
       h1 {
         margin: 0 0 32px;
         font-size: 28px;
@@ -369,12 +570,48 @@
               </div>
             </div>
           </div>
+
+          <!-- Document Viewer -->
+          <div class="document-viewer-layout" id="document-viewer">
+            <div class="viewer-left">
+              <div class="viewer-header">
+                <div class="viewer-title" id="viewer-title">Document Preview</div>
+                <button class="close-viewer-btn" id="close-viewer-btn" title="Close">✕</button>
+              </div>
+              <div class="viewer-content">
+                <div id="viewer-placeholder" class="empty-state">Select a document to view</div>
+                <iframe id="pdf-viewer" class="pdf-viewer"></iframe>
+                <img id="image-viewer" class="image-viewer" alt="Document preview" />
+              </div>
+            </div>
+            <div class="viewer-right">
+              <div id="analysis-section" class="analysis-section">
+                <div class="analysis-title">Analysis</div>
+                <div id="analysis-meta" class="analysis-meta"></div>
+                <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <button class="add-button" id="add-button" title="Add Document">+</button>
 
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      // Supabase Configuration
+      window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
+      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
+      
+      // Create Supabase client
+      let supabase = null;
+      if (window.supabase) {
+        supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        console.log('Supabase client initialized');
+      }
+    </script>
     <script>
       // PIN Authentication
       const CORRECT_PIN = "11335";
@@ -424,12 +661,53 @@
       // Initialize storage keys for each section
       const SECTIONS = ["poa", "section2", "section3"];
 
-      // Load documents from localStorage
-      function loadDocuments() {
-        SECTIONS.forEach((section) => {
-          const documents = JSON.parse(
-            localStorage.getItem(`${section}_documents`) || "[]"
-          );
+      // Load documents from Supabase and localStorage
+      async function loadDocuments() {
+        SECTIONS.forEach(async (section) => {
+          let documents = [];
+          
+          // Try to load from Supabase first
+          if (supabase) {
+            try {
+              const { data, error } = await supabase
+                .from('documents')
+                .select('id, name, type, size, section, created_at')
+                .eq('section', section)
+                .order('created_at', { ascending: false });
+
+              if (error) {
+                console.error(`Error loading ${section} from Supabase:`, error);
+                // Fallback to localStorage
+                documents = JSON.parse(
+                  localStorage.getItem(`${section}_documents`) || "[]"
+                );
+              } else {
+                // Convert Supabase data to our format
+                documents = (data || []).map(doc => ({
+                  name: doc.name,
+                  type: doc.type,
+                  size: doc.size,
+                  date: doc.created_at,
+                  id: doc.id
+                }));
+                
+                // Also sync to localStorage as backup
+                localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
+              }
+            } catch (supabaseError) {
+              console.error(`Supabase error for ${section}:`, supabaseError);
+              // Fallback to localStorage
+              documents = JSON.parse(
+                localStorage.getItem(`${section}_documents`) || "[]"
+              );
+            }
+          } else {
+            // No Supabase, use localStorage
+            documents = JSON.parse(
+              localStorage.getItem(`${section}_documents`) || "[]"
+            );
+          }
+          
           displayDocuments(section, documents);
         });
       }
@@ -448,10 +726,11 @@
 
         container.innerHTML = documents
           .map((doc, index) => {
-            const date = new Date(doc.date).toLocaleDateString();
+            const date = new Date(doc.date || doc.created_at).toLocaleDateString();
+            const size = doc.size ? ` (${formatFileSize(doc.size)})` : '';
             return `
-                    <div class="document-item">
-                        <div class="document-name">${escapeHtml(doc.name)}</div>
+                    <div class="document-item" data-doc-id="${doc.id || index}">
+                        <div class="document-name">${escapeHtml(doc.name)}${size}</div>
                         <div class="document-date">${date}</div>
                     </div>
                 `;
@@ -464,6 +743,14 @@
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      // Format file size
+      function formatFileSize(bytes) {
+        if (!bytes) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
       }
 
       // Handle section card clicks
@@ -499,6 +786,160 @@
           const documents = JSON.parse(e.newValue || "[]");
           displayDocuments(section, documents);
         }
+      });
+
+      // Load document viewer
+      async function loadDocumentViewer(docId, docName, docType, docSection) {
+        const viewer = document.getElementById('document-viewer');
+        const viewerTitle = document.getElementById('viewer-title');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        const imageViewer = document.getElementById('image-viewer');
+        const viewerPlaceholder = document.getElementById('viewer-placeholder');
+        const analysisBody = document.getElementById('analysis-body');
+        const analysisMeta = document.getElementById('analysis-meta');
+
+        // Show viewer
+        viewer.classList.add('active');
+        viewerTitle.textContent = docName;
+
+        // Hide placeholders, show appropriate viewer
+        viewerPlaceholder.style.display = 'none';
+        pdfViewer.style.display = 'none';
+        imageViewer.style.display = 'none';
+
+        // Try to load file from Supabase
+        if (supabase && docId) {
+          try {
+            const { data, error } = await supabase
+              .from('documents')
+              .select('file_data, analysis_data')
+              .eq('id', docId)
+              .single();
+
+            if (!error && data) {
+              // Display file if available
+              if (data.file_data) {
+                const base64Data = data.file_data;
+                const dataUrl = `data:${docType};base64,${base64Data}`;
+                
+                if (docType === 'application/pdf') {
+                  pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
+                  pdfViewer.style.display = 'block';
+                } else if (docType.startsWith('image/')) {
+                  imageViewer.src = dataUrl;
+                  imageViewer.style.display = 'block';
+                }
+              } else {
+                viewerPlaceholder.textContent = 'File content not available. File may have been too large to store.';
+                viewerPlaceholder.style.display = 'block';
+              }
+
+              // Display analysis if available
+              if (data.analysis_data) {
+                displayAnalysis(data.analysis_data, docName, docSection);
+              } else {
+                analysisMeta.textContent = '';
+                analysisBody.className = 'analysis-body analysis-empty';
+                analysisBody.textContent = 'No analysis available for this document';
+              }
+            } else {
+              viewerPlaceholder.textContent = 'Could not load document.';
+              viewerPlaceholder.style.display = 'block';
+            }
+          } catch (err) {
+            console.error('Error loading document:', err);
+            viewerPlaceholder.textContent = 'Error loading document.';
+            viewerPlaceholder.style.display = 'block';
+          }
+        } else {
+          viewerPlaceholder.textContent = 'Document data not available.';
+          viewerPlaceholder.style.display = 'block';
+        }
+      }
+
+      // Display analysis (similar to index.html)
+      function displayAnalysis(analysis, docName, docSection) {
+        const analysisBody = document.getElementById('analysis-body');
+        const analysisMeta = document.getElementById('analysis-meta');
+
+        analysisMeta.textContent = `Analysis for ${docSection} · ${docName}`;
+        analysisBody.classList.remove('analysis-empty', 'analysis-analyzing');
+
+        const escapeHtml = (text) => {
+          if (text == null) return "";
+          const div = document.createElement("div");
+          div.textContent = String(text);
+          return div.innerHTML;
+        };
+
+        const a = analysis;
+        const strengths = Array.isArray(a.strengths) && a.strengths.length ? a.strengths : ["No clear strengths identified."];
+        const issues = Array.isArray(a.issues) && a.issues.length ? a.issues : ["No major issues identified."];
+        const recs = Array.isArray(a.recommendations) && a.recommendations.length ? a.recommendations : [];
+
+        const fields = a.extractedFields || {};
+        const principalAddress = escapeHtml(fields.principalAddress || "Not found");
+        const agentAddress = escapeHtml(fields.agentAddress || "Not found");
+        const principalName = escapeHtml(fields.principalName || "Not found");
+        const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
+        const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
+        const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
+        const executionDate = escapeHtml(fields.executionDate || "Not found");
+        const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
+        const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
+
+        const summary = escapeHtml(a.summary || "No summary provided.");
+        const overall = escapeHtml(a.overallAssessment || "No overall assessment provided.");
+        const disclaimer = escapeHtml(a.disclaimer || "This is not legal advice. Please consult a licensed attorney in the relevant state.");
+
+        analysisBody.innerHTML = `
+          <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+            <div style="display: grid; gap: 12px;">
+              <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
+              <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
+              <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+              <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
+              <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
+              <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
+              <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
+              <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
+              <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px; margin-top: 20px;"><strong style="color: #111827;">Summary:</strong> <span style="color: #374151;">${summary}</span></div>
+          <div style="margin-bottom: 12px;"><strong style="color: #111827;">Overall Assessment:</strong> <span style="color: #374151;">${overall}</span></div>
+          <div class="analysis-grid" style="margin-top: 12px;">
+            <div class="analysis-block analysis-good">
+              <div class="analysis-block-title" style="color: #166534; font-weight: 600; margin-bottom: 8px;">✓ What Looks Good</div>
+              <ul class="analysis-list" style="color: #374151;">
+                ${strengths.map((item) => `<li style="margin-bottom: 6px;">${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </div>
+            <div class="analysis-block analysis-issues">
+              <div class="analysis-block-title" style="color: #991b1b; font-weight: 600; margin-bottom: 8px;">⚠ What May Need Fixing</div>
+              <ul class="analysis-list" style="color: #374151;">
+                ${issues.map((item) => `<li style="margin-bottom: 6px;">${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </div>
+          </div>
+          ${recs.length ? `<div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb;"><strong style="color: #111827;">Recommendations:</strong>
+               <ul class="analysis-list" style="color: #374151; margin-top: 8px;">
+                 ${recs.map((r) => `<li style="margin-bottom: 6px;">${escapeHtml(r)}</li>`).join("")}
+               </ul>
+             </div>` : ""}
+          <div class="analysis-disclaimer" style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #d1d5db; color: #6b7280; font-size: 11px;">${disclaimer}</div>
+        `;
+      }
+
+      // Close viewer
+      document.getElementById('close-viewer-btn').addEventListener('click', function() {
+        document.getElementById('document-viewer').classList.remove('active');
+        document.getElementById('pdf-viewer').src = '';
+        document.getElementById('image-viewer').src = '';
+        document.getElementById('pdf-viewer').style.display = 'none';
+        document.getElementById('image-viewer').style.display = 'none';
+        document.querySelectorAll('.document-item').forEach(item => item.classList.remove('active'));
       });
 
       // Load documents on page load

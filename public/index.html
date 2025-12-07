@@ -231,34 +231,6 @@
         display: none;
       }
 
-      .back-btn {
-        width: auto;
-        height: auto;
-        border: none;
-        background: transparent;
-        color: #1d4ed8;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        margin-right: auto;
-        flex-shrink: 0;
-        padding: 6px 12px;
-        border-radius: 6px;
-        transition: background 0.2s ease;
-      }
-
-      .back-btn:hover {
-        background: #e0e7ff;
-        color: #1e40af;
-      }
-
-      .back-btn:active {
-        background: #c7d2fe;
-      }
-
       .close-pdf-btn {
         width: auto;
         height: auto;
@@ -966,7 +938,6 @@
         <div class="drag-handle" id="drag-left"></div>
         <div class="column column-center" id="column-center">
           <div class="center-header">
-            <button id="back-btn" class="back-btn" type="button" onclick="window.location.href='main.html'" title="Back to Main">← Back</button>
             <button id="close-pdf-btn" class="close-pdf-btn" type="button">✕</button>
             <div id="poa-status" class="poa-status"></div>
             <div id="state-error" class="state-error"></div>
@@ -1009,6 +980,20 @@
     </div>
     </div>
 
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      // Supabase Configuration
+      window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
+      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
+      
+      // Create Supabase client
+      let supabase = null;
+      if (window.supabase) {
+        supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        console.log('Supabase client initialized');
+      }
+    </script>
     <script>
       // PIN Authentication
       const CORRECT_PIN = "11335";
@@ -1086,9 +1071,10 @@
         let startLeftWidth = 0;
         let startRightWidth = 0;
 
-        // Function to save document to localStorage
-        function saveDocumentToStorage(file) {
+        // Function to save document to Supabase and localStorage
+        async function saveDocumentToStorage(file) {
           try {
+            // Save to localStorage (fallback)
             const documents = JSON.parse(localStorage.getItem('poa_documents') || '[]');
             const documentInfo = {
               name: file.name,
@@ -1102,6 +1088,34 @@
             if (!exists) {
               documents.push(documentInfo);
               localStorage.setItem('poa_documents', JSON.stringify(documents));
+            }
+
+            // Save to Supabase if available
+            if (supabase) {
+              try {
+                // Save document metadata to Supabase
+                // For now, we'll store metadata only (file_data can be added later if needed)
+                const { data, error } = await supabase
+                  .from('documents')
+                  .insert([
+                    {
+                      name: file.name,
+                      type: file.type,
+                      size: file.size,
+                      section: 'poa', // Default to POA section
+                      created_at: new Date().toISOString()
+                    }
+                  ])
+                  .select();
+
+                if (error) {
+                  console.error('Error saving to Supabase:', error);
+                } else {
+                  console.log('Document saved to Supabase:', data);
+                }
+              } catch (supabaseError) {
+                console.error('Supabase save error:', supabaseError);
+              }
             }
           } catch (e) {
             console.error('Error saving document to storage:', e);
@@ -1565,6 +1579,35 @@
             } else {
               console.log("Successfully parsed analysis object:", a);
               analysisBody.classList.remove("analysis-empty", "analysis-analyzing");
+
+              // Save analysis to Supabase if available
+              if (supabase && file) {
+                try {
+                  // Find the document in Supabase by name and update with analysis
+                  const { data: docs, error: findError } = await supabase
+                    .from('documents')
+                    .select('id')
+                    .eq('name', file.name)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                  if (!findError && docs && docs.length > 0) {
+                    const docId = docs[0].id;
+                    const { error: updateError } = await supabase
+                      .from('documents')
+                      .update({ analysis_data: a })
+                      .eq('id', docId);
+
+                    if (updateError) {
+                      console.error('Error saving analysis to Supabase:', updateError);
+                    } else {
+                      console.log('Analysis saved to Supabase');
+                    }
+                  }
+                } catch (supabaseError) {
+                  console.error('Error saving analysis:', supabaseError);
+                }
+              }
 
               // Helper to escape HTML and handle undefined/null
               const escapeHtml = (text) => {

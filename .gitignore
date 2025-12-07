@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Supabase
+.env.supabase
+
 # Dependencies
 node_modules/
 package-lock.json
