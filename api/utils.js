@@ -20,59 +20,67 @@ async function extractTextFromFile(file) {
   } else if (isImage) {
     try {
       console.log('🖼️ Starting image OCR processing...');
-      // Optimize image processing - resize if too large, optimize for OCR
+      // Aggressively optimize image for fast OCR
       let processedImage = file.buffer;
       
       // Get image metadata
       const metadata = await sharp(file.buffer).metadata();
-      console.log('📐 Image dimensions:', metadata.width, 'x', metadata.height);
+      console.log('📐 Original dimensions:', metadata.width, 'x', metadata.height);
       
-      // If image is very large, resize it to speed up OCR (max 1500px on longest side for faster processing)
-      if (metadata.width > 1500 || metadata.height > 1500) {
-        const maxDimension = 1500;
+      // Aggressively resize to max 1000px for much faster OCR
+      const maxDimension = 1000;
+      let targetWidth = metadata.width;
+      let targetHeight = metadata.height;
+      
+      if (metadata.width > maxDimension || metadata.height > maxDimension) {
         const ratio = Math.min(maxDimension / metadata.width, maxDimension / metadata.height);
-        console.log('🔄 Resizing image for faster OCR:', Math.round(metadata.width * ratio), 'x', Math.round(metadata.height * ratio));
-        
-        processedImage = await sharp(file.buffer)
-          .resize(Math.round(metadata.width * ratio), Math.round(metadata.height * ratio), {
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
-      } else {
-        // Process smaller images normally
-        console.log('✨ Processing image at original size');
-        processedImage = await sharp(file.buffer)
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
+        targetWidth = Math.round(metadata.width * ratio);
+        targetHeight = Math.round(metadata.height * ratio);
+        console.log('🔄 Resizing to:', targetWidth, 'x', targetHeight, 'for faster OCR');
       }
       
-      console.log('🔤 Starting OCR recognition...');
-      // Use faster OCR settings with timeout
+      // Process image with aggressive optimization
+      processedImage = await sharp(file.buffer)
+        .resize(targetWidth, targetHeight, {
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .greyscale() // Convert to greyscale
+        .normalize() // Normalize contrast
+        .sharpen({ sigma: 1 }) // Light sharpen
+        .toBuffer();
+      
+      console.log('🔤 Starting OCR recognition with fast settings...');
+      
+      // Use fastest OCR settings possible
       const ocrPromise = Tesseract.recognize(processedImage, 'eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            const progress = Math.round(m.progress * 100);
-            console.log(`📊 OCR progress: ${progress}%`);
-          }
-        },
-        // Optimize for speed
-        tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()[]{}\'"-@#$%&*+/=<>|\\_~`',
+        logger: () => {}, // Disable logging for speed
+        // Fastest settings
+        tessedit_pageseg_mode: '6', // Assume uniform block of text (fastest)
+        tessedit_ocr_engine_mode: '1', // LSTM only (faster than legacy)
+        // Remove whitelist to speed up (less processing)
       });
       
-      // Add timeout for OCR (25 seconds max)
+      // Shorter timeout - 15 seconds max
       const ocrTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('OCR processing timeout')), 25000)
+        setTimeout(() => reject(new Error('OCR processing timeout - image may be too complex')), 15000)
       );
       
       const result = await Promise.race([ocrPromise, ocrTimeout]);
       text = result.data?.text || "";
+      
+      if (!text || text.trim().length === 0) {
+        console.warn('⚠️ OCR returned no text, trying with different settings...');
+        // Fallback: try with different page segmentation
+        const fallbackResult = await Promise.race([
+          Tesseract.recognize(processedImage, 'eng', {
+            tessedit_pageseg_mode: '1', // Auto with OSD
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Fallback OCR timeout')), 10000))
+        ]);
+        text = fallbackResult.data?.text || "";
+      }
+      
       console.log('✅ OCR completed, extracted', text.length, 'characters');
     } catch (ocrError) {
       console.error("❌ OCR error:", ocrError);

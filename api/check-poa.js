@@ -175,18 +175,22 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Extract text with timeout
+    // Extract text with shorter timeout for images
     let text;
     try {
-      const extractTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Text extraction timeout')), 30000)
-      );
+      const isImage = file.mimetype.startsWith('image/');
+      const extractTimeout = isImage 
+        ? new Promise((_, reject) => setTimeout(() => reject(new Error('Text extraction timeout - image processing took too long')), 20000))
+        : new Promise((_, reject) => setTimeout(() => reject(new Error('Text extraction timeout')), 30000));
       
+      console.log('📝 Starting text extraction...');
       text = await Promise.race([
         extractTextFromFile(file),
         extractTimeout
       ]);
+      console.log('✅ Text extraction completed, length:', text.length);
     } catch (extractError) {
+      console.error('❌ Text extraction failed:', extractError);
       clearTimeout(functionTimeout);
       return res.status(400).json({
         isPOA: false,
