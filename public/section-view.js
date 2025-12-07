@@ -81,6 +81,22 @@ async function loadDocuments() {
           type: doc.type,
           size: doc.size,
           date: doc.created_at,
+          hasAnalysis: !!doc.analysis_data,
+          file_path: doc.file_path || null
+        }));
+        localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
+      }
+
+      if (error) {
+        console.error('Error loading documents:', error);
+        documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
+      } else {
+        documents = (data || []).map(doc => ({
+          id: doc.id,
+          name: doc.name,
+          type: doc.type,
+          size: doc.size,
+          date: doc.created_at,
           hasAnalysis: !!doc.analysis_data
         }));
         localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
@@ -104,11 +120,14 @@ async function loadDocuments() {
     const analysisBadge = doc.hasAnalysis ? '<span style="color: #059669; font-size: 11px;">✓ Analyzed</span>' : '';
     return `
       <div class="document-item" data-doc-id="${doc.id || ''}" data-doc-name="${escapeHtml(doc.name)}" data-doc-type="${escapeHtml(doc.type || '')}">
-        <div class="document-name">${escapeHtml(doc.name)}${size}</div>
-        <div class="document-meta">
-          <span>${date}</span>
-          ${analysisBadge}
+        <div class="document-content">
+          <div class="document-name">${escapeHtml(doc.name)}${size}</div>
+          <div class="document-meta">
+            <span>${date}</span>
+            ${analysisBadge}
+          </div>
         </div>
+        <button class="delete-document-btn" data-doc-id="${doc.id || ''}" data-doc-path="${escapeHtml(doc.file_path || '')}" title="Delete document">×</button>
       </div>
     `;
   }).join('');
