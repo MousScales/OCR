@@ -1237,7 +1237,11 @@
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-            const resp = await fetch("http://localhost:5000/check-poa", {
+            // Use relative API path for Vercel, localhost for local dev
+            const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+              ? 'http://localhost:5000'
+              : '';
+            const resp = await fetch(`${apiUrl}/api/check-poa`, {
               method: "POST",
               body: formData,
               signal: controller.signal,
@@ -1485,7 +1489,11 @@
           formData.append("file", file);
 
           try {
-            const resp = await fetch("http://localhost:5000/analyze-poa", {
+            // Use relative API path for Vercel, localhost for local dev
+            const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+              ? 'http://localhost:5000'
+              : '';
+            const resp = await fetch(`${apiUrl}/api/analyze-poa`, {
               method: "POST",
               body: formData,
             });
