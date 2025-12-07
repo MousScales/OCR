@@ -1313,12 +1313,19 @@
             
             let resp;
             try {
+              // Add a progress check every 5 seconds
+              const progressInterval = setInterval(() => {
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+                console.log(`⏳ Still waiting... ${elapsed} seconds elapsed`);
+              }, 5000);
+              
               resp = await fetch(fullUrl, {
                 method: "POST",
                 body: formData,
                 signal: controller.signal,
               });
               
+              clearInterval(progressInterval);
               const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
               console.log(`✅ Request completed in ${elapsed} seconds`);
               console.log('📡 Response status:', resp.status, resp.statusText);
@@ -1331,6 +1338,16 @@
                 message: fetchError.message,
                 stack: fetchError.stack
               });
+              
+              // Check if it's a network error
+              if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
+                console.error('🌐 Network error - possible causes:');
+                console.error('  1. Function not deployed or not accessible');
+                console.error('  2. CORS issue');
+                console.error('  3. Function timeout (check Vercel logs)');
+                console.error('  4. Function error (check Vercel logs)');
+              }
+              
               throw fetchError;
             }
             

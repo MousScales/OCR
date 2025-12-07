@@ -9,8 +9,14 @@ const openai = new OpenAI({
 function parseMultipartFormData(req) {
   return new Promise((resolve, reject) => {
     try {
+      console.log('📦 parseMultipartFormData: Starting...');
+      console.log('📦 Request headers:', JSON.stringify(req.headers, null, 2));
+      console.log('📦 Request readable:', req.readable);
+      console.log('📦 Request has pipe method:', typeof req.pipe === 'function');
+      
       // Vercel provides req as a stream
       const busboy = Busboy({ headers: req.headers });
+      console.log('📦 Busboy created successfully');
       const fields = {};
       let file = null;
       let fileResolved = false;
