@@ -165,18 +165,30 @@ async function loadDocument(docId, docName, docType) {
 
         // Display file
         if (data.file_data) {
-          let base64Data = data.file_data;
-          if (base64Data.startsWith('data:')) {
-            const dataUrl = base64Data;
-            if (docType === 'application/pdf') {
-              pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
-              pdfViewer.style.display = 'block';
-            } else if (docType.startsWith('image/')) {
-              imageViewer.src = dataUrl;
-              imageViewer.style.display = 'block';
+          try {
+            let base64Data = data.file_data;
+            
+            // Ensure we have valid base64 data
+            if (!base64Data || typeof base64Data !== 'string') {
+              throw new Error('Invalid file data format');
             }
-          } else {
+            
+            // Remove data URL prefix if present
+            if (base64Data.includes(',')) {
+              base64Data = base64Data.split(',')[1];
+            }
+            
+            // Ensure base64 string is clean (remove whitespace)
+            base64Data = base64Data.trim();
+            
+            // Validate base64 format
+            if (!/^[A-Za-z0-9+/=]+$/.test(base64Data)) {
+              throw new Error('Invalid base64 data format');
+            }
+            
+            // Create proper data URL
             const dataUrl = `data:${docType};base64,${base64Data}`;
+            
             if (docType === 'application/pdf') {
               pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
               pdfViewer.style.display = 'block';
@@ -184,6 +196,10 @@ async function loadDocument(docId, docName, docType) {
               imageViewer.src = dataUrl;
               imageViewer.style.display = 'block';
             }
+          } catch (err) {
+            console.error('Error displaying file:', err);
+            viewerPlaceholder.textContent = 'Error loading file: ' + err.message;
+            viewerPlaceholder.style.display = 'block';
           }
         } else {
           viewerPlaceholder.textContent = 'File content not available. You can still run analysis if you upload the file again.';
