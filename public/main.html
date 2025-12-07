@@ -908,24 +908,13 @@
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
       }
 
-      // Handle section card clicks
+      // Handle section card clicks - navigate to section view
       const addButton = document.getElementById("add-button");
       document.querySelectorAll(".section-card").forEach((card) => {
         card.addEventListener("click", function () {
-          // Remove active class from all cards
-          document
-            .querySelectorAll(".section-card")
-            .forEach((c) => c.classList.remove("active"));
-          // Add active class to clicked card
-          this.classList.add("active");
-          
-          // Show plus button only for POA section
           const section = this.getAttribute("data-section");
-          if (section === "poa") {
-            addButton.classList.add("show");
-          } else {
-            addButton.classList.remove("show");
-          }
+          // Navigate to section view page
+          window.location.href = `section-view.html?section=${section}`;
         });
       });
 
