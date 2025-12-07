@@ -1308,12 +1308,15 @@
             }
 
             const data = await resp.json();
+            console.log('✅ POA Check Response:', data);
             
             if (data.error) {
+              console.error('❌ POA Check Error:', data.error);
               throw new Error(data.error);
             }
             
             if (data.isPOA) {
+              console.log('✅ Document IS a POA:', data.poaType || 'Unknown type');
               isPOA = true;
               poaStatus.className = "poa-status is-poa";
               const poaTypeText = data.poaType ? ` (${data.poaType})` : "";
@@ -1323,6 +1326,7 @@
                 analyzeBtn.classList.add("show");
               }
             } else {
+              console.log('❌ Document is NOT a POA');
               isPOA = false;
               poaStatus.className = "poa-status not-poa";
               poaStatus.textContent = "This isn't a POA";
@@ -1330,14 +1334,22 @@
               analyzeBtn.classList.remove("show");
             }
           } catch (err) {
-            console.error("Error checking POA:", err);
+            console.error("❌ Error checking POA:", err);
+            console.error("❌ Error details:", {
+              name: err.name,
+              message: err.message,
+              stack: err.stack
+            });
             if (err.name === 'AbortError') {
+              console.error('⏱️ Request timed out');
               poaStatus.className = "poa-status not-poa";
               poaStatus.textContent = "Request timed out";
             } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+              console.error('🌐 Network error - server may be unreachable');
               poaStatus.className = "poa-status not-poa";
               poaStatus.textContent = "Server connection error";
             } else {
+              console.error('⚠️ Other error:', err.message);
               poaStatus.className = "poa-status not-poa";
               poaStatus.textContent = err.message || "Error checking file";
             }
@@ -1542,14 +1554,22 @@
           formData.append("file", file);
 
           try {
-            // Use relative API path for Vercel, localhost for local dev
-            const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-              ? 'http://localhost:5000'
-              : '';
-            const resp = await fetch(`${apiUrl}/api/analyze-poa`, {
+            // Use correct API path: localhost uses /analyze-poa, Vercel uses /api/analyze-poa
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const apiUrl = isLocal ? 'http://localhost:5000' : '';
+            const endpoint = isLocal ? '/analyze-poa' : '/api/analyze-poa';
+            const fullUrl = `${apiUrl}${endpoint}`;
+            
+            console.log('🔬 Starting POA analysis...');
+            console.log('📍 API URL:', fullUrl);
+            console.log('📄 File:', file.name, 'State:', selectedState);
+            
+            const resp = await fetch(fullUrl, {
               method: "POST",
               body: formData,
             });
+            
+            console.log('📡 Analysis response status:', resp.status, resp.statusText);
 
             if (!resp.ok) {
               const errText = await resp.text();
@@ -1557,10 +1577,11 @@
             }
 
             const data = await resp.json();
+            console.log('✅ Analysis Response received:', data);
             analysisMeta.textContent =
               "Analysis for " + selectedState + " · " + file.name;
             
-            console.log("Raw response data:", data);
+            console.log("📊 Raw response data:", data);
             let a = data.analysis;
             console.log("Initial analysis value:", a, "Type:", typeof a);
 
