@@ -86,21 +86,6 @@ async function loadDocuments() {
         }));
         localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
       }
-
-      if (error) {
-        console.error('Error loading documents:', error);
-        documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
-      } else {
-        documents = (data || []).map(doc => ({
-          id: doc.id,
-          name: doc.name,
-          type: doc.type,
-          size: doc.size,
-          date: doc.created_at,
-          hasAnalysis: !!doc.analysis_data
-        }));
-        localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
-      }
     } catch (err) {
       console.error('Supabase error:', err);
       documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
