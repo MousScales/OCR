@@ -1094,62 +1094,80 @@
               localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
             }
 
-            // Save to Supabase if available
+            // Save to Supabase Storage if available
             if (supabase) {
               try {
-            // Save document to Supabase
-            // Convert file to base64 for storage
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-              try {
-                const base64Data = reader.result.split(',')[1]; // Remove data:type;base64, prefix
+                console.log('📤 Uploading file to Supabase Storage...');
                 
-                const { data, error } = await supabase
+                // Create unique filename with timestamp
+                const timestamp = Date.now();
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                const filePath = `${currentSection}/${fileName}`;
+                
+                // Upload file to Supabase Storage
+                const { data: uploadData, error: uploadError } = await supabase.storage
                   .from('documents')
-                  .insert([
-                    {
-                      name: file.name,
-                      type: file.type,
-                      size: file.size,
-                      section: currentSection, // Use section from URL
-                      file_data: base64Data, // Store as base64 string
-                      created_at: new Date().toISOString()
-                    }
-                  ])
-                  .select();
-
-                if (error) {
-                  console.error('Error saving to Supabase:', error);
+                  .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                  });
+                
+                if (uploadError) {
+                  console.error('❌ Storage upload error:', uploadError);
+                  // Fallback: save metadata only
+                  const { data, error } = await supabase
+                    .from('documents')
+                    .insert([
+                      {
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        section: currentSection,
+                        created_at: new Date().toISOString()
+                      }
+                    ])
+                    .select();
+                  
+                  if (error) {
+                    console.error('Error saving metadata:', error);
+                  } else {
+                    console.log('Document metadata saved (upload failed):', data);
+                  }
                 } else {
-                  console.log('Document saved to Supabase:', data);
+                  console.log('✅ File uploaded to Storage:', uploadData.path);
+                  
+                  // Get public URL
+                  const { data: urlData } = supabase.storage
+                    .from('documents')
+                    .getPublicUrl(filePath);
+                  
+                  const publicUrl = urlData.publicUrl;
+                  console.log('✅ Public URL:', publicUrl);
+                  
+                  // Save document record with file path
+                  const { data, error } = await supabase
+                    .from('documents')
+                    .insert([
+                      {
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        section: currentSection,
+                        file_path: filePath,
+                        created_at: new Date().toISOString()
+                      }
+                    ])
+                    .select();
+                  
+                  if (error) {
+                    console.error('Error saving document record:', error);
+                  } else {
+                    console.log('✅ Document saved to Supabase:', data);
+                  }
                 }
               } catch (supabaseError) {
-                console.error('Error processing file for Supabase:', supabaseError);
-              }
-            };
-            
-            // Read file as data URL (only for files < 5MB to avoid memory issues)
-            if (file.size < 5 * 1024 * 1024) {
-              reader.readAsDataURL(file);
-            } else {
-              // For large files, save metadata only
-              const { data, error } = await supabase
-                .from('documents')
-                .insert([
-                  {
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    section: currentSection, // Use section from URL
-                    created_at: new Date().toISOString()
-                  }
-                ])
-                .select();
-
-              if (error) {
-                console.error('Error saving to Supabase:', error);
-              } else {
-                console.log('Document metadata saved to Supabase:', data);
+                console.error('Error uploading to Supabase Storage:', supabaseError);
               }
             }
               } catch (supabaseError) {

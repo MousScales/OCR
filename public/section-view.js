@@ -67,7 +67,7 @@ async function loadDocuments() {
     try {
       const { data, error } = await supabase
         .from('documents')
-        .select('id, name, type, size, created_at, analysis_data')
+        .select('id, name, type, size, created_at, analysis_data, file_path')
         .eq('section', section)
         .order('created_at', { ascending: false });
 
@@ -151,7 +151,7 @@ async function loadDocument(docId, docName, docType) {
     try {
       const { data, error } = await supabase
         .from('documents')
-        .select('file_data, analysis_data')
+        .select('file_path, file_data, analysis_data')
         .eq('id', docId)
         .single();
 
@@ -160,72 +160,62 @@ async function loadDocument(docId, docName, docType) {
           id: docId,
           name: docName,
           type: docType,
-          fileData: data.file_data || null
+          filePath: data.file_path || null,
+          fileData: data.file_data || null // Keep for backward compatibility
         };
 
-        // Display file
-        if (data.file_data) {
+        // Display file - prefer Storage URL over base64
+        let fileUrl = null;
+        
+        if (data.file_path) {
+          // Use Supabase Storage public URL
+          console.log('📦 Loading file from Storage:', data.file_path);
+          const { data: urlData } = supabase.storage
+            .from('documents')
+            .getPublicUrl(data.file_path);
+          
+          fileUrl = urlData.publicUrl;
+          console.log('✅ Storage URL:', fileUrl);
+        } else if (data.file_data) {
+          // Fallback to base64 for old documents
+          console.log('📦 Loading file from base64 (legacy)');
           try {
             let base64Data = data.file_data;
-            console.log('📦 File data type:', typeof base64Data);
-            console.log('📦 File data length:', base64Data?.length);
             
-            // Handle different data formats from Supabase
             if (typeof base64Data === 'object' && base64Data !== null) {
-              // Might be a Buffer object or other format
-              console.log('⚠️ File data is object, attempting conversion...');
               if (Buffer.isBuffer(base64Data)) {
                 base64Data = base64Data.toString('base64');
               } else if (base64Data.data) {
                 base64Data = base64Data.data;
-              } else {
-                // Try to stringify and extract
-                base64Data = JSON.stringify(base64Data);
               }
             }
             
-            // Ensure we have a string
-            if (typeof base64Data !== 'string') {
-              throw new Error('File data is not in a valid format');
-            }
-            
-            // Remove data URL prefix if present
-            if (base64Data.includes(',')) {
-              base64Data = base64Data.split(',')[1];
-            }
-            
-            // Remove any whitespace/newlines that might cause issues
-            base64Data = base64Data.replace(/[\s\n\r\t]/g, '');
-            
-            // Basic validation - just check it's not empty
-            if (base64Data.length === 0) {
-              throw new Error('File data is empty');
-            }
-            
-            // Check if it looks like base64 (has valid base64 characters)
-            // But don't fail if it doesn't - browsers are more lenient
-            const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
-            if (!base64Pattern.test(base64Data.substring(0, 1000))) {
-              console.warn('⚠️ Base64 data may have invalid characters, but attempting to use it anyway');
-            }
-            
-            // Create proper data URL
-            const dataUrl = `data:${docType};base64,${base64Data}`;
-            console.log('✅ Created data URL, length:', dataUrl.length);
-            
-            if (docType === 'application/pdf') {
-              pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
-              pdfViewer.style.display = 'block';
-              console.log('✅ PDF viewer loaded');
-            } else if (docType.startsWith('image/')) {
-              imageViewer.src = dataUrl;
-              imageViewer.style.display = 'block';
-              console.log('✅ Image viewer loaded');
+            if (typeof base64Data === 'string') {
+              if (base64Data.includes(',')) {
+                base64Data = base64Data.split(',')[1];
+              }
+              base64Data = base64Data.replace(/[\s\n\r\t]/g, '');
+              fileUrl = `data:${docType};base64,${base64Data}`;
             }
           } catch (err) {
-            console.error('❌ Error displaying file:', err);
-            console.error('❌ Error stack:', err.stack);
-            viewerPlaceholder.textContent = 'Error loading file: ' + err.message + '. File may need to be re-uploaded.';
+            console.error('Error processing base64:', err);
+          }
+        }
+        
+        if (fileUrl) {
+          try {
+            if (docType === 'application/pdf') {
+              pdfViewer.src = fileUrl + '#toolbar=0&navpanes=0&scrollbar=0';
+              pdfViewer.style.display = 'block';
+              console.log('✅ PDF viewer loaded from:', fileUrl.substring(0, 50) + '...');
+            } else if (docType.startsWith('image/')) {
+              imageViewer.src = fileUrl;
+              imageViewer.style.display = 'block';
+              console.log('✅ Image viewer loaded from:', fileUrl.substring(0, 50) + '...');
+            }
+          } catch (err) {
+            console.error('❌ Error setting viewer source:', err);
+            viewerPlaceholder.textContent = 'Error loading file.';
             viewerPlaceholder.style.display = 'block';
           }
         } else {
