@@ -10,14 +10,6 @@
   },
   "rewrites": [
     {
-      "source": "/api/check-poa",
-      "destination": "/api/check-poa.js"
-    },
-    {
-      "source": "/api/analyze-poa",
-      "destination": "/api/analyze-poa.js"
-    },
-    {
       "source": "/(.*)",
       "destination": "/public/$1"
     }

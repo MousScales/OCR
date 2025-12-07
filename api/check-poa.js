@@ -98,21 +98,36 @@ function parseMultipartFormData(req) {
 }
 
 module.exports = async (req, res) => {
+  console.log('🚀 check-poa function called');
+  console.log('📋 Request method:', req.method);
+  console.log('📋 Request URL:', req.url);
+  console.log('📋 Request headers:', JSON.stringify(req.headers, null, 2));
+  console.log('🌍 Environment:', process.env.VERCEL ? 'Vercel' : 'Local');
+  
   // Set CORS headers immediately
-  const origin = req.headers.origin;
+  const origin = req.headers.origin || req.headers.Origin;
+  console.log('🌐 Origin:', origin);
+  
   if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('.vercel.app'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    // Allow all origins in development
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
+    console.log('✅ OPTIONS request, returning 200');
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    console.log('❌ Method not allowed:', req.method);
+    return res.status(405).json({ error: 'Method not allowed', received: req.method });
   }
+  
+  console.log('✅ POST request received, starting processing...');
 
   // Set a timeout for the entire function
   // Vercel free tier has 10s limit, Pro has up to 60s
