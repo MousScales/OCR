@@ -226,6 +226,87 @@
         padding-top: 8px;
       }
 
+      .analyze-button {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #ffffff;
+        background: #1d4ed8;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+        margin-top: 16px;
+      }
+
+      .analyze-button:hover {
+        background: #1e40af;
+      }
+
+      .analyze-button:active {
+        background: #1e3a8a;
+      }
+
+      .analyze-button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+
+      .state-select {
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      .state-select:focus {
+        outline: none;
+        border-color: #1d4ed8;
+        box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.1);
+      }
+
+      .analysis-analyzing {
+        color: #4b5563;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .bouncing-dots {
+        display: inline-block;
+      }
+
+      .bouncing-dots span {
+        display: inline-block;
+        animation: bounce 1.4s infinite ease-in-out both;
+      }
+
+      .bouncing-dots span:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+
+      .bouncing-dots span:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+
+      @keyframes bounce {
+        0%, 80%, 100% {
+          transform: scale(0);
+        }
+        40% {
+          transform: scale(1);
+        }
+      }
+
       .pdf-viewer {
         display: none;
         width: 100%;
@@ -589,6 +670,62 @@
                 <div class="analysis-title">Analysis</div>
                 <div id="analysis-meta" class="analysis-meta"></div>
                 <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
+                <div id="analyze-controls" style="display: none; padding: 16px; border-top: 1px solid #e5e7eb;">
+                  <select id="state-select" class="state-select">
+                    <option value="">Select a state...</option>
+                    <option value="Alabama">Alabama</option>
+                    <option value="Alaska">Alaska</option>
+                    <option value="Arizona">Arizona</option>
+                    <option value="Arkansas">Arkansas</option>
+                    <option value="California">California</option>
+                    <option value="Colorado">Colorado</option>
+                    <option value="Connecticut">Connecticut</option>
+                    <option value="Delaware">Delaware</option>
+                    <option value="Florida">Florida</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Hawaii">Hawaii</option>
+                    <option value="Idaho">Idaho</option>
+                    <option value="Illinois">Illinois</option>
+                    <option value="Indiana">Indiana</option>
+                    <option value="Iowa">Iowa</option>
+                    <option value="Kansas">Kansas</option>
+                    <option value="Kentucky">Kentucky</option>
+                    <option value="Louisiana">Louisiana</option>
+                    <option value="Maine">Maine</option>
+                    <option value="Maryland">Maryland</option>
+                    <option value="Massachusetts">Massachusetts</option>
+                    <option value="Michigan">Michigan</option>
+                    <option value="Minnesota">Minnesota</option>
+                    <option value="Mississippi">Mississippi</option>
+                    <option value="Missouri">Missouri</option>
+                    <option value="Montana">Montana</option>
+                    <option value="Nebraska">Nebraska</option>
+                    <option value="Nevada">Nevada</option>
+                    <option value="New Hampshire">New Hampshire</option>
+                    <option value="New Jersey">New Jersey</option>
+                    <option value="New Mexico">New Mexico</option>
+                    <option value="New York">New York</option>
+                    <option value="North Carolina">North Carolina</option>
+                    <option value="North Dakota">North Dakota</option>
+                    <option value="Ohio">Ohio</option>
+                    <option value="Oklahoma">Oklahoma</option>
+                    <option value="Oregon">Oregon</option>
+                    <option value="Pennsylvania">Pennsylvania</option>
+                    <option value="Rhode Island">Rhode Island</option>
+                    <option value="South Carolina">South Carolina</option>
+                    <option value="South Dakota">South Dakota</option>
+                    <option value="Tennessee">Tennessee</option>
+                    <option value="Texas">Texas</option>
+                    <option value="Utah">Utah</option>
+                    <option value="Vermont">Vermont</option>
+                    <option value="Virginia">Virginia</option>
+                    <option value="Washington">Washington</option>
+                    <option value="West Virginia">West Virginia</option>
+                    <option value="Wisconsin">Wisconsin</option>
+                    <option value="Wyoming">Wyoming</option>
+                  </select>
+                  <button id="run-analysis-btn" class="analyze-button">Run Analysis</button>
+                </div>
               </div>
             </div>
           </div>
@@ -729,13 +866,31 @@
             const date = new Date(doc.date || doc.created_at).toLocaleDateString();
             const size = doc.size ? ` (${formatFileSize(doc.size)})` : '';
             return `
-                    <div class="document-item" data-doc-id="${doc.id || index}">
+                    <div class="document-item" data-doc-id="${doc.id || index}" data-doc-name="${escapeHtml(doc.name)}" data-doc-type="${escapeHtml(doc.type || '')}" data-doc-section="${section}">
                         <div class="document-name">${escapeHtml(doc.name)}${size}</div>
                         <div class="document-date">${date}</div>
                     </div>
                 `;
           })
           .join("");
+
+        // Add click handlers to document items
+        container.querySelectorAll('.document-item').forEach(item => {
+          item.addEventListener('click', function() {
+            // Remove active class from all items
+            container.querySelectorAll('.document-item').forEach(i => i.classList.remove('active'));
+            // Add active class to clicked item
+            this.classList.add('active');
+            
+            // Load and display the document
+            const docId = this.getAttribute('data-doc-id');
+            const docName = this.getAttribute('data-doc-name');
+            const docType = this.getAttribute('data-doc-type');
+            const docSection = this.getAttribute('data-doc-section');
+            
+            loadDocumentViewer(docId, docName, docType, docSection);
+          });
+        });
       }
 
       // Escape HTML to prevent XSS
@@ -817,30 +972,56 @@
               .single();
 
             if (!error && data) {
+              // Store current document info for analysis
+              window.currentDocument = {
+                id: docId,
+                name: docName,
+                type: docType,
+                section: docSection,
+                fileData: data.file_data || null
+              };
+
               // Display file if available
               if (data.file_data) {
-                const base64Data = data.file_data;
-                const dataUrl = `data:${docType};base64,${base64Data}`;
+                // file_data is stored as base64 string in Supabase
+                let base64Data = data.file_data;
                 
-                if (docType === 'application/pdf') {
-                  pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
-                  pdfViewer.style.display = 'block';
-                } else if (docType.startsWith('image/')) {
-                  imageViewer.src = dataUrl;
-                  imageViewer.style.display = 'block';
+                // If it's already a data URL, use it directly
+                if (base64Data.startsWith('data:')) {
+                  const dataUrl = base64Data;
+                  if (docType === 'application/pdf') {
+                    pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
+                    pdfViewer.style.display = 'block';
+                  } else if (docType.startsWith('image/')) {
+                    imageViewer.src = dataUrl;
+                    imageViewer.style.display = 'block';
+                  }
+                } else {
+                  // It's base64, create data URL
+                  const dataUrl = `data:${docType};base64,${base64Data}`;
+                  
+                  if (docType === 'application/pdf') {
+                    pdfViewer.src = dataUrl + '#toolbar=0&navpanes=0&scrollbar=0';
+                    pdfViewer.style.display = 'block';
+                  } else if (docType.startsWith('image/')) {
+                    imageViewer.src = dataUrl;
+                    imageViewer.style.display = 'block';
+                  }
                 }
               } else {
-                viewerPlaceholder.textContent = 'File content not available. File may have been too large to store.';
+                viewerPlaceholder.textContent = 'File content not available. File may have been too large to store. You can still run analysis if you upload the file again.';
                 viewerPlaceholder.style.display = 'block';
               }
 
               // Display analysis if available
               if (data.analysis_data) {
                 displayAnalysis(data.analysis_data, docName, docSection);
+                document.getElementById('analyze-controls').style.display = 'none';
               } else {
                 analysisMeta.textContent = '';
                 analysisBody.className = 'analysis-body analysis-empty';
-                analysisBody.textContent = 'No analysis available for this document';
+                analysisBody.textContent = 'No analysis available for this document. Select a state and run analysis below.';
+                document.getElementById('analyze-controls').style.display = 'block';
               }
             } else {
               viewerPlaceholder.textContent = 'Could not load document.';
@@ -932,6 +1113,125 @@
         `;
       }
 
+      // Run analysis from viewer
+      document.getElementById('run-analysis-btn').addEventListener('click', async function() {
+        const stateSelect = document.getElementById('state-select');
+        const selectedState = stateSelect.value;
+        const analyzeBtn = this;
+        const analysisBody = document.getElementById('analysis-body');
+        const analysisMeta = document.getElementById('analysis-meta');
+
+        if (!selectedState) {
+          alert('Please select a state first');
+          return;
+        }
+
+        if (!window.currentDocument) {
+          alert('Document information not available');
+          return;
+        }
+
+        // If file data is not available, prompt user to upload file
+        if (!window.currentDocument.fileData) {
+          const uploadFile = confirm('File content not available. Would you like to upload the file again to run analysis?');
+          if (uploadFile) {
+            window.location.href = 'index.html';
+            return;
+          }
+          return;
+        }
+
+        analyzeBtn.disabled = true;
+        analyzeBtn.textContent = 'Analyzing...';
+        analysisBody.className = 'analysis-body analysis-analyzing';
+        analysisBody.innerHTML = 'Analyzing<span class="bouncing-dots"><span>.</span><span>.</span><span>.</span></span>';
+        analysisMeta.textContent = '';
+
+        try {
+          // Convert base64 to blob
+          let base64Data = window.currentDocument.fileData;
+          
+          // Handle different base64 formats
+          if (typeof base64Data !== 'string') {
+            // If it's already a buffer or object, we can't use it
+            throw new Error('File data not available in correct format');
+          }
+          
+          // Remove data URL prefix if present
+          if (base64Data.includes(',')) {
+            base64Data = base64Data.split(',')[1];
+          }
+          
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: window.currentDocument.type });
+          const file = new File([blob], window.currentDocument.name, { type: window.currentDocument.type });
+
+          const formData = new FormData();
+          formData.append('state', selectedState);
+          formData.append('file', file);
+
+          const apiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5000'
+            : '';
+
+          const resp = await fetch(`${apiUrl}/api/analyze-poa`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!resp.ok) {
+            throw new Error('Analysis failed');
+          }
+
+          const data = await resp.json();
+          let analysis = data.analysis;
+
+          if (typeof analysis === 'string') {
+            try {
+              analysis = JSON.parse(analysis);
+            } catch (e) {
+              throw new Error('Invalid analysis format');
+            }
+          }
+
+          // Display analysis
+          displayAnalysis(analysis, window.currentDocument.name, selectedState);
+
+          // Save analysis to Supabase
+          if (supabase && window.currentDocument.id) {
+            try {
+              const { error } = await supabase
+                .from('documents')
+                .update({ analysis_data: analysis })
+                .eq('id', window.currentDocument.id);
+
+              if (error) {
+                console.error('Error saving analysis:', error);
+              } else {
+                console.log('Analysis saved to Supabase');
+              }
+            } catch (err) {
+              console.error('Error saving analysis:', err);
+            }
+          }
+
+          document.getElementById('analyze-controls').style.display = 'none';
+        } catch (err) {
+          console.error('Analysis error:', err);
+          analysisBody.className = 'analysis-body analysis-empty';
+          analysisBody.textContent = 'Error running analysis: ' + (err.message || 'Unknown error');
+          analysisMeta.textContent = 'Analysis failed';
+        } finally {
+          analyzeBtn.disabled = false;
+          analyzeBtn.textContent = 'Run Analysis';
+        }
+      });
+
       // Close viewer
       document.getElementById('close-viewer-btn').addEventListener('click', function() {
         document.getElementById('document-viewer').classList.remove('active');
@@ -939,7 +1239,9 @@
         document.getElementById('image-viewer').src = '';
         document.getElementById('pdf-viewer').style.display = 'none';
         document.getElementById('image-viewer').style.display = 'none';
+        document.getElementById('analyze-controls').style.display = 'none';
         document.querySelectorAll('.document-item').forEach(item => item.classList.remove('active'));
+        window.currentDocument = null;
       });
 
       // Load documents on page load

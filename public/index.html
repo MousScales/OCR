@@ -1093,8 +1093,13 @@
             // Save to Supabase if available
             if (supabase) {
               try {
-                // Save document metadata to Supabase
-                // For now, we'll store metadata only (file_data can be added later if needed)
+            // Save document to Supabase
+            // Convert file to base64 for storage
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              try {
+                const base64Data = reader.result.split(',')[1]; // Remove data:type;base64, prefix
+                
                 const { data, error } = await supabase
                   .from('documents')
                   .insert([
@@ -1103,6 +1108,7 @@
                       type: file.type,
                       size: file.size,
                       section: 'poa', // Default to POA section
+                      file_data: base64Data, // Store as base64 string
                       created_at: new Date().toISOString()
                     }
                   ])
@@ -1113,6 +1119,35 @@
                 } else {
                   console.log('Document saved to Supabase:', data);
                 }
+              } catch (supabaseError) {
+                console.error('Error processing file for Supabase:', supabaseError);
+              }
+            };
+            
+            // Read file as data URL (only for files < 5MB to avoid memory issues)
+            if (file.size < 5 * 1024 * 1024) {
+              reader.readAsDataURL(file);
+            } else {
+              // For large files, save metadata only
+              const { data, error } = await supabase
+                .from('documents')
+                .insert([
+                  {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    section: 'poa',
+                    created_at: new Date().toISOString()
+                  }
+                ])
+                .select();
+
+              if (error) {
+                console.error('Error saving to Supabase:', error);
+              } else {
+                console.log('Document metadata saved to Supabase:', data);
+              }
+            }
               } catch (supabaseError) {
                 console.error('Supabase save error:', supabaseError);
               }

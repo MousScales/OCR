@@ -8,43 +8,67 @@ const openai = new OpenAI({
 
 function parseMultipartFormData(req) {
   return new Promise((resolve, reject) => {
-    const busboy = Busboy({ headers: req.headers });
-    const fields = {};
-    let file = null;
+    try {
+      const busboy = Busboy({ headers: req.headers });
+      const fields = {};
+      let file = null;
+      let fileResolved = false;
 
-    busboy.on('file', (name, fileStream, info) => {
-      const { filename, encoding, mimeType } = info;
-      const chunks = [];
+      busboy.on('file', (name, fileStream, info) => {
+        const { filename, encoding, mimeType } = info;
+        const chunks = [];
 
-      fileStream.on('data', (chunk) => {
-        chunks.push(chunk);
+        fileStream.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+
+        fileStream.on('end', () => {
+          file = {
+            fieldname: name,
+            originalname: filename,
+            encoding: encoding,
+            mimetype: mimeType,
+            buffer: Buffer.concat(chunks),
+            size: Buffer.concat(chunks).length
+          };
+          fileResolved = true;
+        });
+
+        fileStream.on('error', (err) => {
+          console.error('File stream error:', err);
+          if (!fileResolved) {
+            reject(err);
+          }
+        });
       });
 
-      fileStream.on('end', () => {
-        file = {
-          fieldname: name,
-          originalname: filename,
-          encoding: encoding,
-          mimetype: mimeType,
-          buffer: Buffer.concat(chunks),
-          size: Buffer.concat(chunks).length
-        };
+      busboy.on('field', (name, value) => {
+        fields[name] = value;
       });
-    });
 
-    busboy.on('field', (name, value) => {
-      fields[name] = value;
-    });
+      busboy.on('finish', () => {
+        // Give a small delay to ensure file is processed
+        setTimeout(() => {
+          resolve({ fields, file });
+        }, 100);
+      });
 
-    busboy.on('finish', () => {
-      resolve({ fields, file });
-    });
+      busboy.on('error', (err) => {
+        console.error('Busboy error:', err);
+        reject(err);
+      });
 
-    busboy.on('error', (err) => {
+      // Handle request body - Vercel might have already consumed it
+      if (req.body && typeof req.body === 'object' && !req.body.pipe) {
+        // Body already parsed, need to reconstruct
+        reject(new Error('Request body already parsed. Vercel may need different handling.'));
+      } else {
+        req.pipe(busboy);
+      }
+    } catch (err) {
+      console.error('Parse error:', err);
       reject(err);
-    });
-
-    req.pipe(busboy);
+    }
   });
 }
 
@@ -53,8 +77,7 @@ module.exports = async (req, res) => {
   const allowedOrigins = [
     "http://127.0.0.1:5500",
     "http://localhost:5500",
-    "https://ocr-mu-seven.vercel.app",
-    "https://*.vercel.app"
+    "https://ocr-mu-seven.vercel.app"
   ];
   
   const origin = req.headers.origin;
@@ -73,6 +96,15 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Ensure request is readable
+    if (!req.readable) {
+      return res.status(400).json({
+        isPOA: false,
+        poaType: null,
+        error: "Request body not readable. Please ensure Content-Type is multipart/form-data.",
+      });
+    }
+
     const { file } = await parseMultipartFormData(req);
 
     if (!file) {
