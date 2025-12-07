@@ -19,18 +19,45 @@ async function extractTextFromFile(file) {
     }
   } else if (isImage) {
     try {
-      const processedImage = await sharp(file.buffer)
-        .greyscale()
-        .normalize()
-        .sharpen()
-        .toBuffer();
+      // Optimize image processing - resize if too large, optimize for OCR
+      let processedImage = file.buffer;
       
+      // Get image metadata
+      const metadata = await sharp(file.buffer).metadata();
+      
+      // If image is very large, resize it to speed up OCR (max 2000px on longest side)
+      if (metadata.width > 2000 || metadata.height > 2000) {
+        const maxDimension = 2000;
+        const ratio = Math.min(maxDimension / metadata.width, maxDimension / metadata.height);
+        
+        processedImage = await sharp(file.buffer)
+          .resize(Math.round(metadata.width * ratio), Math.round(metadata.height * ratio), {
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          .greyscale()
+          .normalize()
+          .sharpen()
+          .toBuffer();
+      } else {
+        // Process smaller images normally
+        processedImage = await sharp(file.buffer)
+          .greyscale()
+          .normalize()
+          .sharpen()
+          .toBuffer();
+      }
+      
+      // Use faster OCR settings
       const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
         logger: m => {
           if (m.status === 'recognizing text') {
             console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
           }
-        }
+        },
+        // Optimize for speed
+        tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()[]{}\'"-@#$%&*+/=<>|\\_~`',
       });
       text = ocrText || "";
     } catch (ocrError) {
@@ -49,4 +76,3 @@ async function extractTextFromFile(file) {
 }
 
 module.exports = { extractTextFromFile };
-

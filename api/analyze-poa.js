@@ -13,6 +13,14 @@ function parseMultipartFormData(req) {
       const fields = {};
       let file = null;
       let fileResolved = false;
+      let finished = false;
+
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          reject(new Error('Request timeout while parsing form data'));
+        }
+      }, 5000);
 
       busboy.on('file', (name, fileStream, info) => {
         const { filename, encoding, mimeType } = info;
@@ -23,20 +31,24 @@ function parseMultipartFormData(req) {
         });
 
         fileStream.on('end', () => {
-          file = {
-            fieldname: name,
-            originalname: filename,
-            encoding: encoding,
-            mimetype: mimeType,
-            buffer: Buffer.concat(chunks),
-            size: Buffer.concat(chunks).length
-          };
-          fileResolved = true;
+          if (!fileResolved) {
+            file = {
+              fieldname: name,
+              originalname: filename,
+              encoding: encoding,
+              mimetype: mimeType,
+              buffer: Buffer.concat(chunks),
+              size: Buffer.concat(chunks).length
+            };
+            fileResolved = true;
+          }
         });
 
         fileStream.on('error', (err) => {
           console.error('File stream error:', err);
-          if (!fileResolved) {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timeout);
             reject(err);
           }
         });
@@ -47,22 +59,32 @@ function parseMultipartFormData(req) {
       });
 
       busboy.on('finish', () => {
-        // Give a small delay to ensure file is processed
-        setTimeout(() => {
-          resolve({ fields, file });
-        }, 100);
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          setTimeout(() => {
+            resolve({ fields, file });
+          }, 50);
+        }
       });
 
       busboy.on('error', (err) => {
         console.error('Busboy error:', err);
-        reject(err);
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          reject(err);
+        }
       });
 
-      // Handle request body
-      if (req.body && typeof req.body === 'object' && !req.body.pipe) {
-        reject(new Error('Request body already parsed. Vercel may need different handling.'));
-      } else {
+      if (req.on && typeof req.on === 'function') {
         req.pipe(busboy);
+      } else {
+        if (req.body) {
+          reject(new Error('Request body already consumed. Use multipart/form-data.'));
+        } else {
+          reject(new Error('Cannot parse request body.'));
+        }
       }
     } catch (err) {
       console.error('Parse error:', err);
@@ -72,15 +94,8 @@ function parseMultipartFormData(req) {
 }
 
 module.exports = async (req, res) => {
-  // Set CORS headers
-  const allowedOrigins = [
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "https://ocr-mu-seven.vercel.app"
-  ];
-  
   const origin = req.headers.origin;
-  if (origin && (allowedOrigins.includes(origin) || origin.includes('.vercel.app'))) {
+  if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('.vercel.app'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -94,18 +109,20 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    // Ensure request is readable
-    if (!req.readable) {
-      return res.status(400).json({
-        error: "Request body not readable. Please ensure Content-Type is multipart/form-data.",
+  const functionTimeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: "Request timed out. The file may be too large or processing took too long.",
       });
     }
+  }, 50000);
 
+  try {
     const { fields, file } = await parseMultipartFormData(req);
     const state = fields.state;
 
     if (!state || !file) {
+      clearTimeout(functionTimeout);
       return res.status(400).json({
         error: "Missing state or file.",
       });
@@ -115,10 +132,18 @@ module.exports = async (req, res) => {
 
     let text;
     try {
-      text = await extractTextFromFile(file);
+      const extractTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Text extraction timeout')), 30000)
+      );
+      
+      text = await Promise.race([
+        extractTextFromFile(file),
+        extractTimeout
+      ]);
     } catch (extractError) {
+      clearTimeout(functionTimeout);
       return res.status(400).json({
-        error: extractError.message,
+        error: extractError.message || "Failed to extract text from file",
       });
     }
 
@@ -163,19 +188,28 @@ module.exports = async (req, res) => {
       "POA text:\n" +
       text.slice(0, 12000);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-    });
+    const openaiTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('OpenAI API timeout')), 25000)
+    );
+
+    const completion = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 2000,
+      }),
+      openaiTimeout
+    ]);
 
     const raw = completion.choices[0]?.message?.content;
 
     if (!raw) {
+      clearTimeout(functionTimeout);
       return res.status(500).json({ error: "No analysis text was returned." });
     }
 
@@ -202,14 +236,17 @@ module.exports = async (req, res) => {
       parsed = JSON.parse(jsonText);
     } catch (e) {
       console.error("Failed to parse model JSON:", e, raw);
+      clearTimeout(functionTimeout);
       return res.status(500).json({
         error: "Model did not return valid JSON.",
         raw,
       });
     }
 
+    clearTimeout(functionTimeout);
     return res.status(200).json({ analysis: parsed });
   } catch (err) {
+    clearTimeout(functionTimeout);
     console.error("Error in /analyze-poa:", err);
     return res.status(500).json({
       error: "Unexpected error during analysis.",

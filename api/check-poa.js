@@ -9,10 +9,19 @@ const openai = new OpenAI({
 function parseMultipartFormData(req) {
   return new Promise((resolve, reject) => {
     try {
+      // Vercel provides req as a stream
       const busboy = Busboy({ headers: req.headers });
       const fields = {};
       let file = null;
       let fileResolved = false;
+      let finished = false;
+
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          reject(new Error('Request timeout while parsing form data'));
+        }
+      }, 5000); // 5 second timeout for parsing
 
       busboy.on('file', (name, fileStream, info) => {
         const { filename, encoding, mimeType } = info;
@@ -23,20 +32,24 @@ function parseMultipartFormData(req) {
         });
 
         fileStream.on('end', () => {
-          file = {
-            fieldname: name,
-            originalname: filename,
-            encoding: encoding,
-            mimetype: mimeType,
-            buffer: Buffer.concat(chunks),
-            size: Buffer.concat(chunks).length
-          };
-          fileResolved = true;
+          if (!fileResolved) {
+            file = {
+              fieldname: name,
+              originalname: filename,
+              encoding: encoding,
+              mimetype: mimeType,
+              buffer: Buffer.concat(chunks),
+              size: Buffer.concat(chunks).length
+            };
+            fileResolved = true;
+          }
         });
 
         fileStream.on('error', (err) => {
           console.error('File stream error:', err);
-          if (!fileResolved) {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timeout);
             reject(err);
           }
         });
@@ -47,23 +60,35 @@ function parseMultipartFormData(req) {
       });
 
       busboy.on('finish', () => {
-        // Give a small delay to ensure file is processed
-        setTimeout(() => {
-          resolve({ fields, file });
-        }, 100);
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          // Small delay to ensure file is fully processed
+          setTimeout(() => {
+            resolve({ fields, file });
+          }, 50);
+        }
       });
 
       busboy.on('error', (err) => {
         console.error('Busboy error:', err);
-        reject(err);
+        if (!finished) {
+          finished = true;
+          clearTimeout(timeout);
+          reject(err);
+        }
       });
 
-      // Handle request body - Vercel might have already consumed it
-      if (req.body && typeof req.body === 'object' && !req.body.pipe) {
-        // Body already parsed, need to reconstruct
-        reject(new Error('Request body already parsed. Vercel may need different handling.'));
-      } else {
+      // Pipe the request to busboy
+      if (req.on && typeof req.on === 'function') {
         req.pipe(busboy);
+      } else {
+        // If req is not a stream, try to read it
+        if (req.body) {
+          reject(new Error('Request body already consumed. Use multipart/form-data.'));
+        } else {
+          reject(new Error('Cannot parse request body.'));
+        }
       }
     } catch (err) {
       console.error('Parse error:', err);
@@ -73,15 +98,9 @@ function parseMultipartFormData(req) {
 }
 
 module.exports = async (req, res) => {
-  // Set CORS headers
-  const allowedOrigins = [
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "https://ocr-mu-seven.vercel.app"
-  ];
-  
+  // Set CORS headers immediately
   const origin = req.headers.origin;
-  if (origin && (allowedOrigins.includes(origin) || origin.includes('.vercel.app'))) {
+  if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('.vercel.app'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -95,19 +114,22 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    // Ensure request is readable
-    if (!req.readable) {
-      return res.status(400).json({
+  // Set a timeout for the entire function
+  const functionTimeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({
         isPOA: false,
         poaType: null,
-        error: "Request body not readable. Please ensure Content-Type is multipart/form-data.",
+        error: "Request timed out. The file may be too large or processing took too long.",
       });
     }
+  }, 50000); // 50 seconds (leaving 10s buffer for Vercel)
 
+  try {
     const { file } = await parseMultipartFormData(req);
 
     if (!file) {
+      clearTimeout(functionTimeout);
       return res.status(400).json({
         isPOA: false,
         poaType: null,
@@ -119,6 +141,7 @@ module.exports = async (req, res) => {
 
     // Check file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
+      clearTimeout(functionTimeout);
       return res.status(400).json({
         isPOA: false,
         poaType: null,
@@ -126,17 +149,27 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Extract text with timeout
     let text;
     try {
-      text = await extractTextFromFile(file);
+      const extractTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Text extraction timeout')), 30000)
+      );
+      
+      text = await Promise.race([
+        extractTextFromFile(file),
+        extractTimeout
+      ]);
     } catch (extractError) {
+      clearTimeout(functionTimeout);
       return res.status(400).json({
         isPOA: false,
         poaType: null,
-        error: extractError.message,
+        error: extractError.message || "Failed to extract text from file",
       });
     }
 
+    // Call OpenAI with timeout
     const systemPrompt =
       "You are a document classifier. Analyze the provided document text and determine if it is a Power of Attorney (POA) document. " +
       "Respond ONLY with strict JSON, no extra text. " +
@@ -152,19 +185,28 @@ module.exports = async (req, res) => {
       "Analyze the following document text and determine if it is a Power of Attorney document:\n\n" +
       text.slice(0, 8000);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.1,
-    });
+    const openaiTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('OpenAI API timeout')), 20000)
+    );
+
+    const completion = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 500,
+      }),
+      openaiTimeout
+    ]);
 
     const raw = completion.choices[0]?.message?.content;
 
     if (!raw) {
+      clearTimeout(functionTimeout);
       return res.status(500).json({ error: "No classification text was returned." });
     }
 
@@ -181,14 +223,17 @@ module.exports = async (req, res) => {
       parsed = JSON.parse(jsonText);
     } catch (e) {
       console.error("Failed to parse classification JSON:", e, raw);
+      clearTimeout(functionTimeout);
       return res.status(500).json({
         error: "Model did not return valid JSON.",
         raw,
       });
     }
 
+    clearTimeout(functionTimeout);
     return res.status(200).json(parsed);
   } catch (err) {
+    clearTimeout(functionTimeout);
     console.error("Error in /check-poa:", err);
     return res.status(500).json({
       isPOA: false,
