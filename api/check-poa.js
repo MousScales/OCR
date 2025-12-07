@@ -144,7 +144,9 @@ module.exports = async (req, res) => {
   }, 55000); // 55 seconds (leaving 5s buffer for Vercel)
 
   try {
+    console.log('📦 Starting to parse multipart form data...');
     const { file } = await parseMultipartFormData(req);
+    console.log('✅ Form data parsed successfully');
 
     if (!file) {
       clearTimeout(functionTimeout);
