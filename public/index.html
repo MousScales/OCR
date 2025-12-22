@@ -1281,21 +1281,51 @@
             const documentType = currentSection === 'section2' ? data.documentType : data.poaType;
             const detectedState = data.detectedState || null;
             
-            // Auto-select state if detected
-            if (detectedState && !selectedState) {
+            // Auto-select state if detected (ALWAYS select, even if one is already selected)
+            if (detectedState) {
               console.log(`📍 Auto-selecting detected state: ${detectedState}`);
-              const stateItem = document.querySelector(`.state-item[data-state="${detectedState}"]`);
+              // Try exact match first
+              let stateItem = document.querySelector(`.state-item[data-state="${detectedState}"]`);
+              
+              // If not found, try case-insensitive match
+              if (!stateItem) {
+                const allStateItems = document.querySelectorAll('.state-item');
+                for (const item of allStateItems) {
+                  const stateName = item.getAttribute('data-state') || '';
+                  if (stateName.toLowerCase() === detectedState.toLowerCase()) {
+                    stateItem = item;
+                    break;
+                  }
+                }
+              }
+              
+              // If still not found, try partial match (e.g., "California" matches "CA")
+              if (!stateItem) {
+                const allStateItems = document.querySelectorAll('.state-item');
+                for (const item of allStateItems) {
+                  const stateName = item.getAttribute('data-state') || '';
+                  const stateText = item.querySelector('span')?.textContent || '';
+                  if (stateName.toLowerCase().includes(detectedState.toLowerCase()) || 
+                      detectedState.toLowerCase().includes(stateName.toLowerCase()) ||
+                      stateText.toLowerCase().includes(detectedState.toLowerCase())) {
+                    stateItem = item;
+                    break;
+                  }
+                }
+              }
+              
               if (stateItem) {
                 // Remove active class from all states
                 document.querySelectorAll('.state-item').forEach(item => item.classList.remove('active'));
                 // Add active class to detected state
                 stateItem.classList.add('active');
-                selectedState = detectedState;
-                stateLabel.textContent = detectedState;
+                selectedState = stateItem.getAttribute('data-state') || detectedState;
+                stateLabel.textContent = "Selected state: " + selectedState;
                 if (isValid) {
                   analyzeBtn.disabled = false;
                   analyzeBtn.classList.add("show");
                 }
+                console.log(`✅ Auto-selected state: ${selectedState}`);
               } else {
                 console.warn(`⚠️ Detected state "${detectedState}" not found in state list`);
               }
@@ -1327,14 +1357,22 @@
             } catch (err) {
             try {
               console.error("❌ Error checking document:", err);
-              if (err.name && err.message) {
-                console.error("❌ Error details:", {
-                  name: err.name,
-                  message: err.message
-                });
+              try {
+                if (err && typeof err === 'object') {
+                  const errorDetails = {};
+                  if (err.name) errorDetails.name = err.name;
+                  if (err.message) errorDetails.message = err.message;
+                  if (Object.keys(errorDetails).length > 0) {
+                    console.error("❌ Error details:", errorDetails);
+                  }
+                }
+              } catch (logError) {
+                // Prevent crashes when inspecting - don't access err.stack or other properties
+                console.error("❌ Error occurred (details unavailable)");
               }
-            } catch (logError) {
-              // Prevent crashes when inspecting - don't access err.stack
+            } catch (outerError) {
+              // Final fallback
+              console.error("❌ Error occurred");
             }
             if (err.name === 'AbortError') {
               console.error('⏱️ Request timed out');
@@ -1558,11 +1596,23 @@
             console.log('📡 Analysis response status:', resp.status, resp.statusText);
 
             if (!resp.ok) {
-              const errText = await resp.text();
+              let errText = "Backend error";
+              try {
+                errText = await resp.text();
+              } catch (textError) {
+                // Prevent crashes when reading error text
+                errText = `Server error: ${resp.status}`;
+              }
               throw new Error(errText || "Backend error");
             }
 
-            const data = await resp.json();
+            let data;
+            try {
+              data = await resp.json();
+            } catch (jsonError) {
+              // Prevent crashes when parsing JSON
+              throw new Error("Invalid response from server");
+            }
             console.log('✅ Analysis Response received:', data);
             const stateText = selectedState ? selectedState + " · " : "";
             analysisMeta.textContent = "Analysis for " + stateText + file.name;
@@ -1591,27 +1641,33 @@
               }
             }
 
-            // If still not an object, try parsing the entire response
+            // If still not an object, try to extract from data object
             if (!a || typeof a !== "object") {
-              console.log("Analysis is not an object, attempting to parse response directly");
+              console.log("Analysis is not an object, attempting to extract from response data");
               try {
-                const responseText = await resp.text();
-                const responseData = JSON.parse(responseText);
-                a = responseData.analysis;
-                if (a && typeof a === "string") {
-                  let jsonStr = a.trim();
-                  if (jsonStr.startsWith("```")) {
-                    const firstBrace = jsonStr.indexOf("{");
-                    const lastBrace = jsonStr.lastIndexOf("}");
-                    if (firstBrace !== -1 && lastBrace !== -1) {
-                      jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+                // Work with the data we already have (can't call resp.text() again)
+                if (data && typeof data === 'object') {
+                  a = data.analysis || data;
+                  if (a && typeof a === "string") {
+                    let jsonStr = a.trim();
+                    if (jsonStr.startsWith("```")) {
+                      const firstBrace = jsonStr.indexOf("{");
+                      const lastBrace = jsonStr.lastIndexOf("}");
+                      if (firstBrace !== -1 && lastBrace !== -1) {
+                        jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+                      }
+                    }
+                    try {
+                      a = JSON.parse(jsonStr);
+                    } catch (parseErr) {
+                      // Keep as string if parsing fails
                     }
                   }
-                  a = JSON.parse(jsonStr);
                 }
                 console.log("Re-parsed analysis:", a);
               } catch (e) {
                 console.error("Failed to re-parse:", e);
+                // Prevent crashes
               }
             }
 
@@ -1803,10 +1859,30 @@
               `;
             }
           } catch (err) {
-            analysisMeta.textContent = "Analysis failed";
-            analysisBody.textContent =
-              "There was a problem contacting the analysis service.\n\n" +
-              (err && err.message ? err.message : "Unknown error.");
+            try {
+              analysisMeta.textContent = "Analysis failed";
+              let errorMessage = "Unknown error.";
+              try {
+                if (err && typeof err === 'object') {
+                  if (err.message) {
+                    errorMessage = err.message;
+                  } else if (err.toString && typeof err.toString === 'function') {
+                    errorMessage = err.toString();
+                  }
+                } else if (typeof err === 'string') {
+                  errorMessage = err;
+                }
+              } catch (msgError) {
+                // Prevent crashes when accessing error properties
+                errorMessage = "Error occurred during analysis";
+              }
+              analysisBody.textContent =
+                "There was a problem contacting the analysis service.\n\n" + errorMessage;
+            } catch (displayError) {
+              // Final fallback to prevent any crashes
+              analysisMeta.textContent = "Analysis failed";
+              analysisBody.textContent = "An error occurred. Please try again.";
+            }
           }
 
           analysisSection.scrollIntoView({ behavior: "smooth", block: "start" });

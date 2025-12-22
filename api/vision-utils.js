@@ -1,12 +1,53 @@
 const sharp = require('sharp');
 const OpenAI = require('openai');
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// For serverless, we'll use Vision API directly on images
-// PDFs will be handled by converting to images using pdf-parse + sharp if needed
+// Convert PDF first page to image buffer
+async function pdfToImage(pdfBuffer) {
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1); // Get first page
+    
+    const viewport = page.getViewport({ scale: 2.0 });
+    
+    // Use node-canvas if available, otherwise fallback
+    let canvas;
+    try {
+      const { createCanvas } = require('canvas');
+      canvas = createCanvas(viewport.width, viewport.height);
+    } catch (e) {
+      // Fallback: use a simple buffer approach
+      // For serverless, we'll need to handle this differently
+      throw new Error('Canvas not available - PDF conversion requires canvas library');
+    }
+    
+    const context = canvas.getContext('2d');
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+    
+    // Convert canvas to buffer
+    const imageBuffer = canvas.toBuffer('image/png');
+    
+    // Optimize image for Vision API
+    const optimized = await sharp(imageBuffer)
+      .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toBuffer();
+    
+    return optimized;
+  } catch (error) {
+    console.error('Error converting PDF to image:', error);
+    throw error;
+  }
+}
 
 // Analyze document with OpenAI Vision API (for images)
 async function analyzeWithVision(imageBuffer, documentType = 'POA', state = '') {
@@ -102,6 +143,7 @@ async function extractTextWithVision(imageBuffer) {
 }
 
 module.exports = {
+  pdfToImage,
   analyzeWithVision,
   extractTextWithVision
 };
