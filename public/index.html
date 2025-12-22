@@ -318,7 +318,8 @@
         top: 0;
         left: 0;
         pointer-events: none;
-        z-index: 2;
+        z-index: 10;
+        background: transparent;
       }
 
       .extracted-field-highlight {
@@ -2006,74 +2007,127 @@
           const canvas = document.getElementById("annotation-canvas");
           const img = document.getElementById("image-viewer");
           const imageContainer = document.getElementById("image-container");
+          const pdfViewer = document.getElementById("pdf-viewer");
           
-          if (!canvas || !img || !imageContainer || !text || text === "Not found" || text === "Not specified" || text === "None" || text === "Yes" || text === "No") {
-            console.log("Cannot highlight - missing elements or invalid text");
-            return;
-          }
+          console.log("🔍 Attempting to highlight field:", fieldName, "Text:", text);
+          console.log("📋 Elements:", {canvas: !!canvas, img: !!img, container: !!imageContainer, pdfViewer: !!pdfViewer});
           
-          // Make sure canvas is properly sized
-          const imgRect = img.getBoundingClientRect();
-          if (canvas.width !== imgRect.width || canvas.height !== imgRect.height) {
+          // Check if we have an image document
+          if (img && imageContainer && imageContainer.style.display !== 'none') {
+            if (!canvas) {
+              console.error("❌ Canvas element not found");
+              return;
+            }
+            
+            if (!text || text === "Not found" || text === "Not specified" || text === "None" || text === "Yes" || text === "No") {
+              console.log("⚠️ Invalid text for highlighting:", text);
+              return;
+            }
+            
+            // Wait for image to be fully loaded and visible
+            if (!img.complete || img.naturalWidth === 0) {
+              console.log("⏳ Image not fully loaded, waiting...");
+              img.onload = () => highlightTextOnDocument(text, fieldName);
+              return;
+            }
+            
+            // Resize canvas to match image exactly
+            const imgRect = img.getBoundingClientRect();
+            const containerRect = imageContainer.getBoundingClientRect();
+            
+            // Use image's natural dimensions scaled to display size
+            const scaleX = imgRect.width / img.naturalWidth;
+            const scaleY = imgRect.height / img.naturalHeight;
+            
+            // Set canvas size to match image display size exactly
+            // Canvas is inside image-container, so position relative to container
             canvas.width = imgRect.width;
             canvas.height = imgRect.height;
             canvas.style.width = imgRect.width + "px";
             canvas.style.height = imgRect.height + "px";
-          }
-          
-          const ctx = canvas.getContext("2d");
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          
-          // Draw highlight box - positioned based on field type
-          ctx.strokeStyle = "#3b82f6";
-          ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
-          ctx.lineWidth = 3;
-          
-          const boxWidth = Math.min(350, canvas.width * 0.5);
-          const boxHeight = 30;
-          let x, y;
-          
-          // Position based on field type
-          if (fieldName.includes("State") || fieldName.includes("Court") || fieldName.includes("Document")) {
-            x = canvas.width * 0.05;
-            y = canvas.height * 0.05;
-          } else if (fieldName.includes("Name") || fieldName.includes("Estate") || fieldName.includes("Decedent") || fieldName.includes("Principal") || fieldName.includes("Agent")) {
-            x = canvas.width * 0.05;
-            y = canvas.height * 0.25;
-          } else if (fieldName.includes("Date") || fieldName.includes("Signature") || fieldName.includes("Seal") || fieldName.includes("Execution") || fieldName.includes("Notarization")) {
-            x = canvas.width * 0.05;
-            y = canvas.height * 0.75;
-          } else {
-            x = (canvas.width - boxWidth) / 2;
-            y = canvas.height * 0.4;
-          }
-          
-          // Draw highlight box
-          ctx.fillRect(x, y, boxWidth, boxHeight);
-          ctx.strokeRect(x, y, boxWidth, boxHeight);
-          
-          // Add label
-          ctx.fillStyle = "#1e40af";
-          ctx.font = "bold 13px Arial";
-          ctx.fillText(fieldName.replace(/([A-Z])/g, ' $1').trim(), x + 8, y + 20);
-          
-          // Draw a circle indicator
-          ctx.beginPath();
-          ctx.arc(x + boxWidth - 15, y + 15, 8, 0, 2 * Math.PI);
-          ctx.fillStyle = "#3b82f6";
-          ctx.fill();
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          
-          console.log("✅ Highlighted field:", fieldName);
-          
-          // Scroll to highlight
-          setTimeout(() => {
-            if (imageContainer) {
-              imageContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+            canvas.style.position = "absolute";
+            canvas.style.top = "0px";
+            canvas.style.left = "0px";
+            canvas.style.pointerEvents = "none";
+            canvas.style.zIndex = "10";
+            canvas.style.background = "transparent";
+            
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              console.error("❌ Cannot get canvas context");
+              return;
             }
-          }, 100);
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw highlight box - positioned based on field type
+            ctx.strokeStyle = "#3b82f6";
+            ctx.fillStyle = "rgba(59, 130, 246, 0.4)";
+            ctx.lineWidth = 4;
+            
+            const boxWidth = Math.min(400, canvas.width * 0.6);
+            const boxHeight = 35;
+            let x, y;
+            
+            // Position based on field type
+            if (fieldName.includes("State") || fieldName.includes("Court") || fieldName.includes("Document")) {
+              x = canvas.width * 0.05;
+              y = canvas.height * 0.05;
+            } else if (fieldName.includes("Name") || fieldName.includes("Estate") || fieldName.includes("Decedent") || fieldName.includes("Principal") || fieldName.includes("Agent")) {
+              x = canvas.width * 0.05;
+              y = canvas.height * 0.25;
+            } else if (fieldName.includes("Date") || fieldName.includes("Signature") || fieldName.includes("Seal") || fieldName.includes("Execution") || fieldName.includes("Notarization")) {
+              x = canvas.width * 0.05;
+              y = canvas.height * 0.75;
+            } else {
+              x = (canvas.width - boxWidth) / 2;
+              y = canvas.height * 0.4;
+            }
+            
+            // Draw highlight box with rounded corners (fallback to regular rect if roundRect not supported)
+            if (ctx.roundRect) {
+              ctx.beginPath();
+              ctx.roundRect(x, y, boxWidth, boxHeight, 5);
+              ctx.fill();
+              ctx.stroke();
+            } else {
+              // Fallback for browsers that don't support roundRect
+              ctx.fillRect(x, y, boxWidth, boxHeight);
+              ctx.strokeRect(x, y, boxWidth, boxHeight);
+            }
+            
+            // Add label with background
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(x + 5, y + 3, boxWidth - 10, 20);
+            ctx.fillStyle = "#1e40af";
+            ctx.font = "bold 14px Arial";
+            const labelText = fieldName.replace(/([A-Z])/g, ' $1').trim();
+            ctx.fillText(labelText, x + 10, y + 18);
+            
+            // Draw a circle indicator
+            ctx.beginPath();
+            ctx.arc(x + boxWidth - 20, y + 17, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = "#3b82f6";
+            ctx.fill();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            console.log("✅ Highlight drawn at:", x, y, "Size:", boxWidth, boxHeight);
+            
+            // Scroll to highlight
+            setTimeout(() => {
+              if (imageContainer) {
+                imageContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+              }
+            }, 100);
+          } else if (pdfViewer && pdfViewer.style.display !== 'none') {
+            // For PDFs, show a message (can't overlay on iframe)
+            console.log("📄 PDF document - highlighting not available on PDF viewer");
+            alert(`Field "${fieldName}": ${text}\n\nNote: Visual highlighting is not available for PDF documents. Please refer to the extracted information above.`);
+          } else {
+            console.error("❌ No document viewer found");
+          }
         }
       })();
     </script>
