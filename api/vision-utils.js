@@ -9,24 +9,28 @@ const openai = new OpenAI({
 // Convert PDF first page to image buffer
 async function pdfToImage(pdfBuffer) {
   try {
+    // Check if canvas is available (may not work on serverless)
+    let canvas;
+    try {
+      const { createCanvas } = require('canvas');
+      // Test if canvas works
+      const testCanvas = createCanvas(10, 10);
+      canvas = testCanvas.constructor;
+    } catch (canvasError) {
+      console.warn('Canvas library not available or not working:', canvasError.message);
+      throw new Error('Canvas library not available in serverless environment. PDF to image conversion requires native dependencies that may not be available on Vercel.');
+    }
+    
     const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
     const pdf = await loadingTask.promise;
     const page = await pdf.getPage(1); // Get first page
     
     const viewport = page.getViewport({ scale: 2.0 });
     
-    // Use node-canvas if available, otherwise fallback
-    let canvas;
-    try {
-      const { createCanvas } = require('canvas');
-      canvas = createCanvas(viewport.width, viewport.height);
-    } catch (e) {
-      // Fallback: use a simple buffer approach
-      // For serverless, we'll need to handle this differently
-      throw new Error('Canvas not available - PDF conversion requires canvas library');
-    }
-    
-    const context = canvas.getContext('2d');
+    // Create canvas
+    const { createCanvas } = require('canvas');
+    const actualCanvas = createCanvas(viewport.width, viewport.height);
+    const context = actualCanvas.getContext('2d');
     
     await page.render({
       canvasContext: context,
@@ -34,7 +38,7 @@ async function pdfToImage(pdfBuffer) {
     }).promise;
     
     // Convert canvas to buffer
-    const imageBuffer = canvas.toBuffer('image/png');
+    const imageBuffer = actualCanvas.toBuffer('image/png');
     
     // Optimize image for Vision API
     const optimized = await sharp(imageBuffer)
@@ -45,6 +49,10 @@ async function pdfToImage(pdfBuffer) {
     return optimized;
   } catch (error) {
     console.error('Error converting PDF to image:', error);
+    // Provide a more helpful error message
+    if (error.message.includes('Canvas') || error.message.includes('canvas')) {
+      throw new Error('PDF to image conversion not available: Canvas library requires native dependencies that are not available in this serverless environment. Falling back to PDF text extraction.');
+    }
     throw error;
   }
 }

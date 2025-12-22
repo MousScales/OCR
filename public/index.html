@@ -1038,15 +1038,17 @@
               localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
             }
 
-            // Save to Supabase Storage if available
+            // Save to Supabase Storage if available (non-blocking - don't fail if it errors)
             if (window.supabaseClient) {
               const supabase = window.supabaseClient;
-              try {
-                console.log('📤 Uploading file to Supabase Storage...');
-                
-                // Create unique filename with timestamp
-                const timestamp = Date.now();
-                const fileExt = file.name.split('.').pop();
+              // Run Supabase upload in background - don't block main functionality
+              (async () => {
+                try {
+                  console.log('📤 Uploading file to Supabase Storage...');
+                  
+                  // Create unique filename with timestamp
+                  const timestamp = Date.now();
+                  const fileExt = file.name.split('.').pop();
                 const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                 const filePath = `${currentSection}/${fileName}`;
                 
@@ -1111,12 +1113,16 @@
                     console.log('✅ Document saved to Supabase:', data);
                   }
                 }
-              } catch (supabaseError) {
-                console.error('Error uploading to Supabase Storage:', supabaseError);
-              }
+                } catch (supabaseError) {
+                  // Supabase errors are non-critical - don't block main functionality
+                  console.warn('⚠️ Supabase storage error (non-critical):', supabaseError.message || supabaseError);
+                  // Continue - document is still saved to localStorage
+                }
+              })(); // Run async in background
             }
           } catch (e) {
-            console.error('Error saving document to storage:', e);
+            // Storage errors are non-critical
+            console.warn('⚠️ Error saving document to storage (non-critical):', e.message || e);
           }
         }
 
