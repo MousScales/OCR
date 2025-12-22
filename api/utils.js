@@ -52,11 +52,13 @@ async function extractTextFromFile(file) {
       
       console.log('🔤 Running OCR...');
       
-      // OCR with timeout
+      // OCR with timeout - improved for handwriting
       const ocrPromise = Tesseract.recognize(processedImage, 'eng', {
         logger: () => {}, // Disable logging for speed
-        tessedit_pageseg_mode: '6', // Uniform block (fastest)
-        tessedit_ocr_engine_mode: '1' // LSTM only
+        tessedit_pageseg_mode: '6', // Uniform block (good for handwriting)
+        tessedit_ocr_engine_mode: '1', // LSTM only
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+        preserve_interword_spaces: '1'
       });
       
       const ocrTimeout = new Promise((_, reject) => 

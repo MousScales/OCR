@@ -1279,14 +1279,39 @@
             // Check if document is valid based on section type
             const isValid = currentSection === 'section2' ? data.isEstateDocument : data.isPOA;
             const documentType = currentSection === 'section2' ? data.documentType : data.poaType;
+            const detectedState = data.detectedState || null;
+            
+            // Auto-select state if detected
+            if (detectedState && !selectedState) {
+              console.log(`📍 Auto-selecting detected state: ${detectedState}`);
+              const stateItem = document.querySelector(`.state-item[data-state="${detectedState}"]`);
+              if (stateItem) {
+                // Remove active class from all states
+                document.querySelectorAll('.state-item').forEach(item => item.classList.remove('active'));
+                // Add active class to detected state
+                stateItem.classList.add('active');
+                selectedState = detectedState;
+                stateLabel.textContent = detectedState;
+                if (isValid) {
+                  analyzeBtn.disabled = false;
+                  analyzeBtn.classList.add("show");
+                }
+              } else {
+                console.warn(`⚠️ Detected state "${detectedState}" not found in state list`);
+              }
+            }
             
             if (isValid) {
               const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
               console.log(`✅ Document IS a ${docTypeLabel}:`, documentType || 'Unknown type');
+              if (detectedState) {
+                console.log(`📍 Detected state: ${detectedState}`);
+              }
               isPOA = true; // Reuse isPOA flag for both types
               poaStatus.className = "poa-status is-poa";
               const typeText = documentType ? ` (${documentType})` : "";
-              poaStatus.textContent = `This is a ${docTypeLabel}${typeText}`;
+              const stateText = detectedState ? ` · State: ${detectedState}` : "";
+              poaStatus.textContent = `This is a ${docTypeLabel}${typeText}${stateText}`;
               if (selectedState) {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.add("show");
@@ -1300,13 +1325,18 @@
               analyzeBtn.disabled = true;
               analyzeBtn.classList.remove("show");
             }
-          } catch (err) {
-            console.error("❌ Error checking POA:", err);
-            console.error("❌ Error details:", {
-              name: err.name,
-              message: err.message,
-              stack: err.stack
-            });
+            } catch (err) {
+            try {
+              console.error("❌ Error checking document:", err);
+              if (err.name && err.message) {
+                console.error("❌ Error details:", {
+                  name: err.name,
+                  message: err.message
+                });
+              }
+            } catch (logError) {
+              // Prevent crashes when inspecting - don't access err.stack
+            }
             if (err.name === 'AbortError') {
               console.error('⏱️ Request timed out');
               poaStatus.className = "poa-status not-poa";
@@ -1795,8 +1825,12 @@
         });
 
         window.addEventListener("beforeunload", () => {
-          if (currentObjectUrl) {
-            URL.revokeObjectURL(currentObjectUrl);
+          try {
+            if (currentObjectUrl) {
+              URL.revokeObjectURL(currentObjectUrl);
+            }
+          } catch (e) {
+            // Prevent crashes when inspecting
           }
         });
       })();

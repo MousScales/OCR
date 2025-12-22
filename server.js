@@ -89,13 +89,17 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
           .sharpen()
           .toBuffer();
         
-        console.log("Running OCR...");
+        console.log("Running OCR with handwriting support...");
         const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
           logger: m => {
             if (m.status === 'recognizing text') {
               console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
             }
-          }
+          },
+          // Improved settings for handwriting recognition
+          tessedit_pageseg_mode: '6', // Assume uniform block of text
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+          preserve_interword_spaces: '1'
         });
         text = ocrText || "";
         console.log("OCR completed. Text length:", text.length);
@@ -126,11 +130,13 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
 
     const systemPrompt =
       "You are a document classifier. Analyze the provided document text and determine if it is a Power of Attorney (POA) document. " +
+      "Also extract the state mentioned in the document if present. " +
       "Respond ONLY with strict JSON, no extra text. " +
       "JSON shape:\n" +
       "{\n" +
       '  "isPOA": boolean,                    // true if this is a Power of Attorney document, false otherwise\n' +
       '  "poaType": string | null,            // if isPOA is true, specify the type (e.g., "Durable Power of Attorney", "Medical Power of Attorney", "Financial Power of Attorney", "General Power of Attorney", etc.). If false, set to null\n' +
+      '  "detectedState": string | null,      // The U.S. state mentioned in the document (e.g., "California", "New York", "Texas"). Extract from phrases like "State of [X]", "under the laws of [X]", or addresses. If not found, set to null\n' +
       '  "confidence": string                 // "high", "medium", or "low" indicating confidence in the classification\n' +
       "}\n" +
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
@@ -174,12 +180,19 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
       });
     }
 
-    res.json(parsed);
+    // Return with detected state
+    res.json({
+      isPOA: parsed.isPOA,
+      poaType: parsed.poaType,
+      detectedState: parsed.detectedState || null,
+      confidence: parsed.confidence
+    });
   } catch (err) {
     console.error("Error in /check-poa:", err);
     res.status(500).json({
       isPOA: false,
       poaType: null,
+      detectedState: null,
       error: "Unexpected error during POA check.",
       details: err.message || String(err),
     });
@@ -220,13 +233,17 @@ app.post("/analyze-poa", upload.single("file"), async (req, res) => {
           .sharpen()
           .toBuffer();
         
-        console.log("Running OCR for analysis...");
+        console.log("Running OCR for analysis with handwriting support...");
         const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
           logger: m => {
             if (m.status === 'recognizing text') {
               console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
             }
-          }
+          },
+          // Improved settings for handwriting recognition
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+          preserve_interword_spaces: '1'
         });
         text = ocrText || "";
         console.log("OCR completed for analysis. Text length:", text.length);
@@ -380,13 +397,17 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
           .sharpen()
           .toBuffer();
         
-        console.log("Running OCR for estate analysis...");
+        console.log("Running OCR for estate analysis with handwriting support...");
         const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
           logger: m => {
             if (m.status === 'recognizing text') {
               console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
             }
-          }
+          },
+          // Improved settings for handwriting recognition
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+          preserve_interword_spaces: '1'
         });
         text = ocrText || "";
         console.log("OCR completed for estate analysis. Text length:", text.length);
@@ -549,7 +570,11 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
             if (m.status === 'recognizing text') {
               console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
             }
-          }
+          },
+          // Improved settings for handwriting recognition
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+          preserve_interword_spaces: '1'
         });
         text = ocrText || "";
       } catch (ocrError) {
@@ -578,11 +603,13 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
 
     const systemPrompt =
       "You are a document classifier. Analyze the provided document text and determine if it is a court-issued estate document. " +
+      "Also extract the state mentioned in the document if present. " +
       "Respond ONLY with strict JSON, no extra text. " +
       "JSON shape:\n" +
       "{\n" +
       '  "isEstateDocument": boolean,                    // true if this is a court-issued estate document, false otherwise\n' +
       '  "documentType": string | null,                  // if isEstateDocument is true, specify the type (e.g., "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority"). If false, set to null\n' +
+      '  "detectedState": string | null,                 // The U.S. state mentioned in the document (e.g., "California", "New York", "Texas"). Extract from phrases like "State of [X]", "under the laws of [X]", court names, or addresses. If not found, set to null\n' +
       '  "confidence": string                            // "high", "medium", or "low" indicating confidence in the classification\n' +
       "}\n" +
       "Look for keywords: 'Executor', 'Letters of Administration', 'Letters Testamentary', 'Letters of Office', 'Certification of Qualification/Administration', 'Letters of Authority'. " +
@@ -590,7 +617,8 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
 
     const userPrompt =
-      "Analyze the following document text and determine if it is a court-issued estate document:\n\n" +
+      "Analyze the following document text and determine if it is a court-issued estate document. " +
+      "Also extract the U.S. state mentioned in the document (look for 'State of [X]', 'under the laws of [X]', court names, or state names in addresses):\n\n" +
       text.slice(0, 8000);
 
     const completion = await openai.chat.completions.create({
@@ -623,12 +651,21 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
     } catch (e) {
       console.error("Failed to parse classification JSON:", e, raw);
       return res.status(500).json({
+        isEstateDocument: false,
+        documentType: null,
+        detectedState: null,
         error: "Model did not return valid JSON.",
         raw,
       });
     }
 
-    res.json(parsed);
+    // Return with detected state
+    res.json({
+      isEstateDocument: parsed.isEstateDocument,
+      documentType: parsed.documentType,
+      detectedState: parsed.detectedState || null,
+      confidence: parsed.confidence
+    });
   } catch (err) {
     console.error("Error in /check-estate:", err);
     res.status(500).json({

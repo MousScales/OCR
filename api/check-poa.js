@@ -120,15 +120,17 @@ module.exports = async (req, res) => {
     // Call OpenAI
     console.log('🤖 Calling OpenAI for classification...');
     const systemPrompt = `You are a document classifier. Analyze the provided document text and determine if it is a Power of Attorney (POA) document. 
+Also extract the state mentioned in the document if present.
 Respond ONLY with valid JSON, no extra text.
 JSON format:
 {
   "isPOA": boolean,
   "poaType": string | null,
+  "detectedState": string | null,
   "confidence": "high" | "medium" | "low"
 }`;
 
-    const userPrompt = `Analyze this document text and determine if it is a Power of Attorney:\n\n${text.slice(0, 8000)}`;
+    const userPrompt = `Analyze this document text and determine if it is a Power of Attorney. Also extract the U.S. state mentioned in the document (look for 'State of [X]', 'under the laws of [X]', or state names in addresses):\n\n${text.slice(0, 8000)}`;
 
     let completion;
     try {
@@ -182,7 +184,12 @@ JSON format:
     }
 
     console.log('✅ Classification complete:', parsed);
-    return res.status(200).json(parsed);
+    return res.status(200).json({
+      isPOA: parsed.isPOA,
+      poaType: parsed.poaType,
+      detectedState: parsed.detectedState || null,
+      confidence: parsed.confidence
+    });
 
   } catch (error) {
     console.error('❌ Function error:', error);
