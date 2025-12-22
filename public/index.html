@@ -287,14 +287,59 @@
         background: #ffffff;
       }
 
-      .image-viewer {
-        display: none;
-        position: absolute;
-        inset: 0;
+      .document-container {
+        position: relative;
         width: 100%;
         height: 100%;
+      }
+
+      .image-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        overflow: auto;
+      }
+
+      .image-viewer {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
         object-fit: contain;
         background: #ffffff;
+        position: relative;
+        z-index: 1;
+      }
+
+      .annotation-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      .extracted-field-highlight {
+        background-color: rgba(251, 191, 36, 0.2);
+        padding: 2px 4px;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-bottom: 2px solid rgba(251, 191, 36, 0.6);
+        display: inline-block;
+      }
+
+      .extracted-field-highlight:hover {
+        background-color: rgba(251, 191, 36, 0.4);
+        border-bottom-color: rgba(251, 191, 36, 1);
+      }
+
+      .extracted-field-highlight.active {
+        background-color: rgba(34, 197, 94, 0.3);
+        border-bottom-color: rgba(34, 197, 94, 1);
+        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.3);
       }
 
       .pill {
@@ -1806,15 +1851,15 @@
                   <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
                     <div style="display: grid; gap: 12px;">
-                      <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
-                      <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
-                      <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
-                      <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
-                      <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
-                      <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
-                      <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
-                      <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
-                      <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+                      <div><strong style="color: #111827;">Principal Name:</strong> <span class="extracted-field-highlight" data-field="principalName" data-value="${principalName}">${principalName}</span></div>
+                      <div><strong style="color: #111827;">Principal Address:</strong> <span class="extracted-field-highlight" data-field="principalAddress" data-value="${principalAddress}">${principalAddress}</span></div>
+                      <div><strong style="color: #111827;">Agent Name(s):</strong> <span class="extracted-field-highlight" data-field="agentNames" data-value="${agentNames.map(n => escapeHtml(n)).join(", ")}">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Agent Address:</strong> <span class="extracted-field-highlight" data-field="agentAddress" data-value="${agentAddress}">${agentAddress}</span></div>
+                      <div><strong style="color: #111827;">Successor Agent(s):</strong> <span class="extracted-field-highlight" data-field="successorAgents" data-value="${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
+                      <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span class="extracted-field-highlight" data-field="stateJurisdiction" data-value="${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Execution Date:</strong> <span class="extracted-field-highlight" data-field="executionDate" data-value="${executionDate}">${executionDate}</span></div>
+                      <div><strong style="color: #111827;">Notarization Date:</strong> <span class="extracted-field-highlight" data-field="notarizationDate" data-value="${notarizationDate}">${notarizationDate}</span></div>
+                      <div><strong style="color: #111827;">Signature Detected:</strong> <span class="extracted-field-highlight" data-field="signatureDetected" data-value="${signatureDetected}">${signatureDetected}</span></div>
                     </div>
                   </div>
                 `;
@@ -1911,12 +1956,24 @@
           const canvas = document.getElementById("annotation-canvas");
           if (!canvas || !img) return;
           
+          // Wait for image to fully load
+          if (!img.complete) {
+            img.onload = () => setupAnnotationCanvas(img);
+            return;
+          }
+          
           const container = img.parentElement;
-          const rect = container.getBoundingClientRect();
-          canvas.width = rect.width;
-          canvas.height = rect.height;
-          canvas.style.width = rect.width + "px";
-          canvas.style.height = rect.height + "px";
+          if (!container) return;
+          
+          // Match canvas size to image display size
+          const imgRect = img.getBoundingClientRect();
+          canvas.width = imgRect.width;
+          canvas.height = imgRect.height;
+          canvas.style.width = imgRect.width + "px";
+          canvas.style.height = imgRect.height + "px";
+          canvas.style.position = "absolute";
+          canvas.style.top = "0";
+          canvas.style.left = "0";
         }
 
         // Setup field highlighting on document
@@ -1942,80 +1999,73 @@
         function highlightTextOnDocument(text, fieldName) {
           const canvas = document.getElementById("annotation-canvas");
           const img = document.getElementById("image-viewer");
+          const imageContainer = document.getElementById("image-container");
           
-          if (!canvas || !img || !text || text === "Not found" || text === "Not specified" || text === "None" || text === "Yes" || text === "No") {
+          if (!canvas || !img || !imageContainer || !text || text === "Not found" || text === "Not specified" || text === "None" || text === "Yes" || text === "No") {
+            console.log("Cannot highlight - missing elements or invalid text");
             return;
+          }
+          
+          // Make sure canvas is properly sized
+          const imgRect = img.getBoundingClientRect();
+          if (canvas.width !== imgRect.width || canvas.height !== imgRect.height) {
+            canvas.width = imgRect.width;
+            canvas.height = imgRect.height;
+            canvas.style.width = imgRect.width + "px";
+            canvas.style.height = imgRect.height + "px";
           }
           
           const ctx = canvas.getContext("2d");
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           
-          // Get image dimensions and scale
-          const imgRect = img.getBoundingClientRect();
-          const imgNaturalWidth = img.naturalWidth;
-          const imgNaturalHeight = img.naturalHeight;
-          const scaleX = imgRect.width / imgNaturalWidth;
-          const scaleY = imgRect.height / imgNaturalHeight;
-          
-          // Draw highlight box - this is a simplified version
-          // In production, you'd use OCR coordinates or text matching
+          // Draw highlight box - positioned based on field type
           ctx.strokeStyle = "#3b82f6";
-          ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+          ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
           ctx.lineWidth = 3;
           
-          // Draw multiple highlight boxes to show where text might be
-          const boxWidth = Math.min(300, canvas.width * 0.4);
-          const boxHeight = 25;
+          const boxWidth = Math.min(350, canvas.width * 0.5);
+          const boxHeight = 30;
+          let x, y;
           
-          // Top section (header info)
+          // Position based on field type
           if (fieldName.includes("State") || fieldName.includes("Court") || fieldName.includes("Document")) {
-            const x = canvas.width * 0.1;
-            const y = canvas.height * 0.05;
-            ctx.fillRect(x, y, boxWidth, boxHeight);
-            ctx.strokeRect(x, y, boxWidth, boxHeight);
-            ctx.fillStyle = "#1e40af";
-            ctx.font = "bold 12px Arial";
-            ctx.fillText(fieldName, x + 5, y + 16);
+            x = canvas.width * 0.05;
+            y = canvas.height * 0.05;
+          } else if (fieldName.includes("Name") || fieldName.includes("Estate") || fieldName.includes("Decedent") || fieldName.includes("Principal") || fieldName.includes("Agent")) {
+            x = canvas.width * 0.05;
+            y = canvas.height * 0.25;
+          } else if (fieldName.includes("Date") || fieldName.includes("Signature") || fieldName.includes("Seal") || fieldName.includes("Execution") || fieldName.includes("Notarization")) {
+            x = canvas.width * 0.05;
+            y = canvas.height * 0.75;
+          } else {
+            x = (canvas.width - boxWidth) / 2;
+            y = canvas.height * 0.4;
           }
-          // Middle section (main content)
-          else if (fieldName.includes("Name") || fieldName.includes("Estate") || fieldName.includes("Decedent")) {
-            const x = canvas.width * 0.1;
-            const y = canvas.height * 0.2;
-            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
-            ctx.fillRect(x, y, boxWidth, boxHeight);
-            ctx.strokeRect(x, y, boxWidth, boxHeight);
-            ctx.fillStyle = "#1e40af";
-            ctx.font = "bold 12px Arial";
-            ctx.fillText(fieldName, x + 5, y + 16);
-          }
-          // Bottom section (signatures/dates)
-          else if (fieldName.includes("Date") || fieldName.includes("Signature") || fieldName.includes("Seal")) {
-            const x = canvas.width * 0.1;
-            const y = canvas.height * 0.8;
-            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
-            ctx.fillRect(x, y, boxWidth, boxHeight);
-            ctx.strokeRect(x, y, boxWidth, boxHeight);
-            ctx.fillStyle = "#1e40af";
-            ctx.font = "bold 12px Arial";
-            ctx.fillText(fieldName, x + 5, y + 16);
-          }
-          // Default position
-          else {
-            const x = (canvas.width - boxWidth) / 2;
-            const y = canvas.height * 0.3;
-            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
-            ctx.fillRect(x, y, boxWidth, boxHeight);
-            ctx.strokeRect(x, y, boxWidth, boxHeight);
-            ctx.fillStyle = "#1e40af";
-            ctx.font = "bold 12px Arial";
-            ctx.fillText(fieldName, x + 5, y + 16);
-          }
+          
+          // Draw highlight box
+          ctx.fillRect(x, y, boxWidth, boxHeight);
+          ctx.strokeRect(x, y, boxWidth, boxHeight);
+          
+          // Add label
+          ctx.fillStyle = "#1e40af";
+          ctx.font = "bold 13px Arial";
+          ctx.fillText(fieldName.replace(/([A-Z])/g, ' $1').trim(), x + 8, y + 20);
+          
+          // Draw a circle indicator
+          ctx.beginPath();
+          ctx.arc(x + boxWidth - 15, y + 15, 8, 0, 2 * Math.PI);
+          ctx.fillStyle = "#3b82f6";
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          console.log("✅ Highlighted field:", fieldName);
           
           // Scroll to highlight
           setTimeout(() => {
-            const container = document.getElementById("image-container");
-            if (container) {
-              container.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (imageContainer) {
+              imageContainer.scrollIntoView({ behavior: "smooth", block: "center" });
             }
           }, 100);
         }
