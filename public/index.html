@@ -1164,12 +1164,7 @@
         });
 
         selectBtn.addEventListener("click", () => {
-          if (!selectedState) {
-            if (stateError) {
-              stateError.textContent = "Select state first";
-            }
-            return;
-          }
+          // No state selection required - user can upload document first
           fileInput.click();
         });
 
