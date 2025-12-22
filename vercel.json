@@ -20,6 +20,10 @@
       "destination": "/public/main.html"
     },
     {
+      "source": "/index.html",
+      "destination": "/public/main.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/public/$1"
     }

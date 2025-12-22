@@ -8,6 +8,7 @@
       body {
         margin: 0;
         padding: 0;
+        padding-top: 32px;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
           sans-serif;
         background: #e5e7eb;
@@ -23,7 +24,7 @@
         flex: 1;
         width: 100%;
         max-width: none;
-        height: 100vh;
+        height: calc(100vh - 32px);
         box-sizing: border-box;
         padding: 0;
         background: transparent;
@@ -610,9 +611,49 @@
       .main-content {
         display: flex;
       }
+
+      .page-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 32px;
+        background: #ffffff;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        z-index: 1000;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      .back-button {
+        background: none;
+        border: none;
+        color: #6b7280;
+        font-size: 12px;
+        padding: 4px 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: color 0.2s;
+      }
+
+      .back-button:hover {
+        color: #111827;
+      }
+
+      .back-button::before {
+        content: "←";
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
+    <div class="page-header">
+      <button class="back-button" onclick="window.location.href='/main.html'">Back to Document Manager</button>
+    </div>
     <div class="card main-content" id="main-content">
       <div class="main-layout">
         <div class="column column-left" id="column-left">

@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const path = require("path");
 const multer = require("multer");
 const cors = require("cors");
 const pdfParse = require("pdf-parse");
@@ -33,19 +34,15 @@ app.use(
 
 app.use(express.json());
 
-// Redirect root and index.html to main.html (before static file serving)
-app.get("/", (req, res) => {
-  res.redirect("/main.html");
-});
-
-app.get("/index.html", (req, res) => {
-  res.redirect("/main.html");
-});
-
-// Serve static files from the public directory
+// Serve static files from the public directory FIRST
 app.use(express.static("public", {
-  index: false // Disable automatic index.html serving
+  index: "main.html" // Set main.html as the default index file
 }));
+
+// Redirect root to main.html (after static file serving as fallback)
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "main.html"));
+});
 
 app.post("/check-poa", upload.single("file"), async (req, res) => {
   try {
