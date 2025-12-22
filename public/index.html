@@ -1312,10 +1312,9 @@
               const typeText = documentType ? ` (${documentType})` : "";
               const stateText = detectedState ? ` · State: ${detectedState}` : "";
               poaStatus.textContent = `This is a ${docTypeLabel}${typeText}${stateText}`;
-              if (selectedState) {
-                analyzeBtn.disabled = false;
-                analyzeBtn.classList.add("show");
-              }
+              // Enable analyze button if document is valid (state is optional)
+              analyzeBtn.disabled = false;
+              analyzeBtn.classList.add("show");
             } else {
               const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
               console.log(`❌ Document is NOT a ${docTypeLabel}`);
@@ -1515,12 +1514,7 @@
 
         analyzeBtn.addEventListener("click", async () => {
           const file = fileInput.files && fileInput.files[0];
-          if (!selectedState) {
-            if (stateError) {
-              stateError.textContent = "Select state first";
-            }
-            return;
-          }
+          // State is now optional - proceed with analysis if document is valid
           if (!isPOA) {
             if (stateError) {
               const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
@@ -1536,13 +1530,6 @@
             }
             return;
           }
-          if (!isPOA) {
-            if (stateError) {
-              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
-              stateError.textContent = `This file is not a ${docTypeLabel}`;
-            }
-            return;
-          }
 
           // Clear all text and show analyzing with animated dots
           analysisMeta.textContent = "";
@@ -1550,7 +1537,8 @@
           analysisBody.innerHTML = "Analyzing<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>";
 
           const formData = new FormData();
-          formData.append("state", selectedState);
+          // State is optional - send empty string if not selected
+          formData.append("state", selectedState || "");
           formData.append("file", file);
 
           try {
@@ -1576,8 +1564,8 @@
 
             const data = await resp.json();
             console.log('✅ Analysis Response received:', data);
-            analysisMeta.textContent =
-              "Analysis for " + selectedState + " · " + file.name;
+            const stateText = selectedState ? selectedState + " · " : "";
+            analysisMeta.textContent = "Analysis for " + stateText + file.name;
             
             console.log("📊 Raw response data:", data);
             let a = data.analysis;

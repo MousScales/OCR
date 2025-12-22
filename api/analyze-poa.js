@@ -79,10 +79,10 @@ module.exports = async (req, res) => {
       req.pipe(busboy);
     });
 
-    const state = fields.state;
-    if (!state || !file) {
+    const state = fields.state || ""; // State is now optional
+    if (!file) {
       return res.status(400).json({
-        error: "Missing state or file"
+        error: "Missing file"
       });
     }
 
@@ -140,7 +140,8 @@ JSON format:
   "disclaimer": string
 }`;
 
-    const userPrompt = `State: ${state}\n\nAnalyze this POA document text according to the schema above:\n\n${text.slice(0, 12000)}`;
+    const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
+    const userPrompt = stateContext + (state ? "Analyze this POA document text according to the schema above, focusing on state-specific compliance:\n\n" : "Analyze this POA document text according to the schema above, providing a general assessment:\n\n") + text.slice(0, 12000);
 
     let completion;
     try {

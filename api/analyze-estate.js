@@ -79,10 +79,10 @@ module.exports = async (req, res) => {
       req.pipe(busboy);
     });
 
-    const state = fields.state;
-    if (!state || !file) {
+    const state = fields.state || ""; // State is now optional
+    if (!file) {
       return res.status(400).json({
-        error: "Missing state or file"
+        error: "Missing file"
       });
     }
 
@@ -171,9 +171,9 @@ Extraction guidelines:
 
 When analyzing compliance, consider state-specific requirements for estate documents including: required document format, signature requirements, notarization rules, court approval processes, administration types (supervised vs unsupervised), limitations on representative authority, state-specific terminology, and any unique state procedures or requirements.`;
 
-    const userPrompt = `State: ${state}\n\nAnalyze this court-issued estate document text according to the schema above, focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). 
-Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. 
-Identify what might need to be corrected or added to ensure compliance with ${state} state law.\n\nDocument text:\n\n${text.slice(0, 12000)}`;
+    const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
+    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology.";
+    const userPrompt = stateContext + `Analyze this court-issued estate document text according to the schema above, ` + stateSpecificText + `\n\nDocument text:\n\n${text.slice(0, 12000)}`;
 
     let completion;
     try {

@@ -389,10 +389,7 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
   const analysisBody = document.getElementById('analysis-body');
   const analysisMeta = document.getElementById('analysis-meta');
 
-  if (!selectedState) {
-    alert('Please select a state first');
-    return;
-  }
+  // State is now optional - proceed without it if not selected
 
   if (!currentDocument) {
     alert('Document information not available');
@@ -432,7 +429,8 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
     const file = new File([blob], currentDocument.name, { type: currentDocument.type });
 
     const formData = new FormData();
-    formData.append('state', selectedState);
+    // State is optional - send empty string if not selected
+    formData.append('state', selectedState || "");
     formData.append('file', file);
 
     // Use estate endpoint for section2, POA endpoint for poa section

@@ -67,48 +67,85 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
     
     if (isPDF) {
       let pdfData;
+      let visionText = "";
       try {
+        // Try standard PDF text extraction first
         pdfData = await pdfParse(file.buffer);
         text = pdfData?.text || "";
+        console.log("PDF text extracted, length:", text.length);
+        
+        // If no text or very little text, try Vision API for scanned/handwritten PDFs
+        // Note: For PDFs, we'll use Vision API on the image if available, but for now
+        // we'll enhance OCR settings for better handwriting recognition
+        if (!text || text.trim().length < 50) {
+          console.log("📸 PDF has little/no text - this may be a scanned document with handwriting");
+          console.log("💡 Consider uploading as an image for better Vision API handwriting recognition");
+        }
       } catch (parseError) {
         console.error("PDF parse error:", parseError);
+        // PDF parsing failed - return error
         return res.status(400).json({
           isPOA: false,
           poaType: null,
-          error: "Could not parse PDF file.",
+          error: "Could not parse PDF file. If this is a scanned document, try converting it to an image first for better handwriting recognition.",
         });
       }
     } else if (isImage) {
-      // Handle image files with OCR
-      console.log("Processing image with OCR...");
+      // Handle image files with hybrid OCR + Vision API approach
+      console.log("Processing image with OCR and Vision API...");
+      let ocrText = "";
+      let visionText = "";
+      
       try {
-        // Process image with sharp to optimize for OCR
-        const processedImage = await sharp(file.buffer)
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
+        // First, try Vision API for better handwriting recognition
+        console.log("📸 Using Vision API for handwriting and signature recognition...");
+        try {
+          const { extractTextWithVision } = require('./api/vision-utils');
+          visionText = await extractTextWithVision(file.buffer);
+          console.log("✅ Vision API extracted text, length:", visionText.length);
+        } catch (visionError) {
+          console.warn("Vision API failed, falling back to OCR:", visionError.message);
+        }
         
-        console.log("Running OCR with handwriting support...");
-        const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-            }
-          },
-          // Improved settings for handwriting recognition
-          tessedit_pageseg_mode: '6', // Assume uniform block of text
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-          preserve_interword_spaces: '1'
-        });
-        text = ocrText || "";
-        console.log("OCR completed. Text length:", text.length);
-      } catch (ocrError) {
-        console.error("OCR error:", ocrError);
+        // Also run OCR as backup/complement
+        try {
+          const processedImage = await sharp(file.buffer)
+            .greyscale()
+            .normalize()
+            .sharpen()
+            .toBuffer();
+          
+          console.log("Running OCR with handwriting support...");
+          const { data: { text: ocrResult } } = await Tesseract.recognize(processedImage, 'eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
+              }
+            },
+            // Improved settings for handwriting recognition
+            tessedit_pageseg_mode: '6', // Assume uniform block of text
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+            preserve_interword_spaces: '1'
+          });
+          ocrText = ocrResult || "";
+          console.log("OCR completed. Text length:", ocrText.length);
+        } catch (ocrError) {
+          console.warn("OCR failed:", ocrError.message);
+        }
+        
+        // Combine both sources - prefer Vision API if available
+        text = visionText || ocrText || "";
+        if (visionText && ocrText) {
+          // Merge both for comprehensive extraction
+          text = visionText + "\n\n[Additional OCR text:]\n" + ocrText;
+        }
+        console.log("✅ Combined text extraction complete, total length:", text.length);
+      } catch (error) {
+        console.error("Image processing error:", error);
         return res.status(400).json({
           isPOA: false,
           poaType: null,
-          error: "Could not extract text from image: " + (ocrError.message || "Unknown error"),
+          error: "Could not extract text from image: " + (error.message || "Unknown error"),
         });
       }
     } else {
@@ -120,7 +157,29 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
       });
     }
 
+    // If we have an image and Vision API worked, also try visual classification
+    let visionClassification = null;
+    if (isImage && text && text.length > 0) {
+      try {
+        console.log("🔍 Attempting visual classification with Vision API...");
+        const { analyzeWithVision } = require('./api/vision-utils');
+        visionClassification = await analyzeWithVision(file.buffer, 'POA', '');
+        console.log("✅ Vision classification result:", visionClassification);
+      } catch (visionError) {
+        console.warn("Vision classification failed, using text-only:", visionError.message);
+      }
+    }
+
     if (!text || text.trim().length === 0) {
+      // If Vision API gave us a classification, use it even without text
+      if (visionClassification) {
+        return res.json({
+          isPOA: visionClassification.isPOA || false,
+          poaType: visionClassification.poaType || null,
+          detectedState: visionClassification.detectedState || null,
+          confidence: visionClassification.confidence || 'medium'
+        });
+      }
       return res.status(400).json({
         isPOA: false,
         poaType: null,
@@ -180,13 +239,24 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
       });
     }
 
-    // Return with detected state
-    res.json({
-      isPOA: parsed.isPOA,
-      poaType: parsed.poaType,
-      detectedState: parsed.detectedState || null,
-      confidence: parsed.confidence
-    });
+    // Merge Vision API classification if available (prefer Vision for handwriting/signatures)
+    if (visionClassification && visionClassification.confidence === 'high') {
+      // Use Vision API result if it has high confidence
+      res.json({
+        isPOA: visionClassification.isPOA || parsed.isPOA,
+        poaType: visionClassification.poaType || parsed.poaType,
+        detectedState: visionClassification.detectedState || parsed.detectedState || null,
+        confidence: visionClassification.confidence || parsed.confidence
+      });
+    } else {
+      // Return with detected state from text analysis
+      res.json({
+        isPOA: parsed.isPOA,
+        poaType: parsed.poaType,
+        detectedState: parsed.detectedState || null,
+        confidence: parsed.confidence
+      });
+    }
   } catch (err) {
     console.error("Error in /check-poa:", err);
     res.status(500).json({
@@ -201,12 +271,12 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
 
 app.post("/analyze-poa", upload.single("file"), async (req, res) => {
   try {
-    const state = req.body.state;
+    const state = req.body.state || ""; // State is now optional
     const file = req.file;
 
-    if (!state || !file) {
+    if (!file) {
       return res.status(400).json({
-        error: "Missing state or file.",
+        error: "Missing file.",
       });
     }
 
@@ -223,34 +293,58 @@ app.post("/analyze-poa", upload.single("file"), async (req, res) => {
       const pdfData = await pdfParse(file.buffer);
       text = pdfData.text;
     } else if (isImage) {
-      // Handle image files with OCR
-      console.log("Processing image with OCR for analysis...");
+      // Handle image files with hybrid OCR + Vision API approach
+      console.log("Processing image with OCR and Vision API for analysis...");
+      let ocrText = "";
+      let visionText = "";
+      
       try {
-        // Process image with sharp to optimize for OCR
-        const processedImage = await sharp(file.buffer)
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
+        // First, try Vision API for better handwriting recognition
+        console.log("📸 Using Vision API for handwriting and signature recognition...");
+        try {
+          const { extractTextWithVision } = require('./api/vision-utils');
+          visionText = await extractTextWithVision(file.buffer);
+          console.log("✅ Vision API extracted text, length:", visionText.length);
+        } catch (visionError) {
+          console.warn("Vision API failed, falling back to OCR:", visionError.message);
+        }
         
-        console.log("Running OCR for analysis with handwriting support...");
-        const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-            }
-          },
-          // Improved settings for handwriting recognition
-          tessedit_pageseg_mode: '6',
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-          preserve_interword_spaces: '1'
-        });
-        text = ocrText || "";
-        console.log("OCR completed for analysis. Text length:", text.length);
-      } catch (ocrError) {
-        console.error("OCR error:", ocrError);
+        // Also run OCR as backup/complement
+        try {
+          const processedImage = await sharp(file.buffer)
+            .greyscale()
+            .normalize()
+            .sharpen()
+            .toBuffer();
+          
+          console.log("Running OCR for analysis with handwriting support...");
+          const { data: { text: ocrResult } } = await Tesseract.recognize(processedImage, 'eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
+              }
+            },
+            tessedit_pageseg_mode: '6',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+            preserve_interword_spaces: '1'
+          });
+          ocrText = ocrResult || "";
+          console.log("OCR completed for analysis. Text length:", ocrText.length);
+        } catch (ocrError) {
+          console.warn("OCR failed:", ocrError.message);
+        }
+        
+        // Combine both sources - prefer Vision API if available
+        text = visionText || ocrText || "";
+        if (visionText && ocrText) {
+          // Merge both for comprehensive extraction
+          text = visionText + "\n\n[Additional OCR text:]\n" + ocrText;
+        }
+        console.log("✅ Combined text extraction complete, total length:", text.length);
+      } catch (error) {
+        console.error("Image processing error:", error);
         return res.status(400).json({
-          error: "Could not extract text from image: " + (ocrError.message || "Unknown error"),
+          error: "Could not extract text from image: " + (error.message || "Unknown error"),
         });
       }
     } else {
@@ -299,10 +393,11 @@ app.post("/analyze-poa", upload.single("file"), async (req, res) => {
       "For signatures, just detect presence/location. " +
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
 
+    const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
     const userPrompt =
-      `State: ${state}\n\n` +
+      stateContext +
       "The following text is from a Power of Attorney document. " +
-      "Analyze it according to the schema above, focusing on whether it appears to follow the rules and format for this state " +
+      (state ? "Analyze it according to the schema above, focusing on whether it appears to follow the rules and format for this state " : "Analyze it according to the schema above, providing a general assessment ") +
       "and what might need to be corrected or added.\n\n" +
       "POA text:\n" +
       text.slice(0, 12000); // keep within reasonable token limits
@@ -368,12 +463,12 @@ app.post("/analyze-poa", upload.single("file"), async (req, res) => {
 // Estate document analysis endpoint
 app.post("/analyze-estate", upload.single("file"), async (req, res) => {
   try {
-    const state = req.body.state;
+    const state = req.body.state || ""; // State is now optional
     const file = req.file;
 
-    if (!state || !file) {
+    if (!file) {
       return res.status(400).json({
-        error: "Missing state or file.",
+        error: "Missing file.",
       });
     }
 
@@ -386,35 +481,73 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      const pdfData = await pdfParse(file.buffer);
-      text = pdfData.text;
-    } else if (isImage) {
-      console.log("Processing image with OCR for estate analysis...");
+      let pdfData;
       try {
-        const processedImage = await sharp(file.buffer)
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
-        
-        console.log("Running OCR for estate analysis with handwriting support...");
-        const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-            }
-          },
-          // Improved settings for handwriting recognition
-          tessedit_pageseg_mode: '6',
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-          preserve_interword_spaces: '1'
-        });
-        text = ocrText || "";
-        console.log("OCR completed for estate analysis. Text length:", text.length);
-      } catch (ocrError) {
-        console.error("OCR error:", ocrError);
+        pdfData = await pdfParse(file.buffer);
+        text = pdfData?.text || "";
+        console.log("PDF text extracted, length:", text.length);
+        if (!text || text.trim().length < 50) {
+          console.log("📸 PDF has little/no text - this may be a scanned document with handwriting");
+        }
+      } catch (parseError) {
+        console.error("PDF parse error:", parseError);
         return res.status(400).json({
-          error: "Could not extract text from image: " + (ocrError.message || "Unknown error"),
+          error: "Could not parse PDF file. If this is a scanned document, try converting it to an image first for better handwriting recognition.",
+        });
+      }
+    } else if (isImage) {
+      // Handle image files with hybrid OCR + Vision API approach
+      console.log("Processing image with OCR and Vision API for estate analysis...");
+      let ocrText = "";
+      let visionText = "";
+      
+      try {
+        // First, try Vision API for better handwriting recognition
+        console.log("📸 Using Vision API for handwriting and signature recognition...");
+        try {
+          const { extractTextWithVision } = require('./api/vision-utils');
+          visionText = await extractTextWithVision(file.buffer);
+          console.log("✅ Vision API extracted text, length:", visionText.length);
+        } catch (visionError) {
+          console.warn("Vision API failed, falling back to OCR:", visionError.message);
+        }
+        
+        // Also run OCR as backup/complement
+        try {
+          const processedImage = await sharp(file.buffer)
+            .greyscale()
+            .normalize()
+            .sharpen()
+            .toBuffer();
+          
+          console.log("Running OCR for estate analysis with handwriting support...");
+          const { data: { text: ocrResult } } = await Tesseract.recognize(processedImage, 'eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
+              }
+            },
+            tessedit_pageseg_mode: '6',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+            preserve_interword_spaces: '1'
+          });
+          ocrText = ocrResult || "";
+          console.log("OCR completed for estate analysis. Text length:", ocrText.length);
+        } catch (ocrError) {
+          console.warn("OCR failed:", ocrError.message);
+        }
+        
+        // Combine both sources - prefer Vision API if available
+        text = visionText || ocrText || "";
+        if (visionText && ocrText) {
+          // Merge both for comprehensive extraction
+          text = visionText + "\n\n[Additional OCR text:]\n" + ocrText;
+        }
+        console.log("✅ Combined text extraction complete, total length:", text.length);
+      } catch (error) {
+        console.error("Image processing error:", error);
+        return res.status(400).json({
+          error: "Could not extract text from image: " + (error.message || "Unknown error"),
         });
       }
     } else {
@@ -470,13 +603,12 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
       "state-specific terminology, and any unique state procedures or requirements. " +
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
 
+    const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
+    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology.";
     const userPrompt =
-      `State: ${state}\n\n` +
+      stateContext +
       "The following text is from a court-issued estate document (letters of administration, letters testamentary, etc.). " +
-      "Analyze it according to the schema above, focusing on whether it appears to follow the rules, requirements, and format for this specific state. " +
-      "Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, " +
-      "administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. " +
-      "Identify what might need to be corrected or added to ensure compliance with ${state} state law.\n\n" +
+      "Analyze it according to the schema above, " + stateSpecificText + "\n\n" +
       "Document text:\n" +
       text.slice(0, 12000);
 
@@ -554,35 +686,77 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      const pdfData = await pdfParse(file.buffer);
-      text = pdfData.text;
-    } else if (isImage) {
-      console.log("Processing image with OCR for estate check...");
+      let pdfData;
       try {
-        const processedImage = await sharp(file.buffer)
-          .greyscale()
-          .normalize()
-          .sharpen()
-          .toBuffer();
-        
-        const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-            }
-          },
-          // Improved settings for handwriting recognition
-          tessedit_pageseg_mode: '6',
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-          preserve_interword_spaces: '1'
-        });
-        text = ocrText || "";
-      } catch (ocrError) {
-        console.error("OCR error:", ocrError);
+        pdfData = await pdfParse(file.buffer);
+        text = pdfData?.text || "";
+        console.log("PDF text extracted, length:", text.length);
+        if (!text || text.trim().length < 50) {
+          console.log("📸 PDF has little/no text - this may be a scanned document with handwriting");
+        }
+      } catch (parseError) {
+        console.error("PDF parse error:", parseError);
         return res.status(400).json({
           isEstateDocument: false,
           documentType: null,
-          error: "Could not extract text from image: " + (ocrError.message || "Unknown error"),
+          error: "Could not parse PDF file. If this is a scanned document, try converting it to an image first for better handwriting recognition.",
+        });
+      }
+    } else if (isImage) {
+      // Handle image files with hybrid OCR + Vision API approach
+      console.log("Processing image with OCR and Vision API for estate check...");
+      let ocrText = "";
+      let visionText = "";
+      
+      try {
+        // First, try Vision API for better handwriting recognition
+        console.log("📸 Using Vision API for handwriting and signature recognition...");
+        try {
+          const { extractTextWithVision } = require('./api/vision-utils');
+          visionText = await extractTextWithVision(file.buffer);
+          console.log("✅ Vision API extracted text, length:", visionText.length);
+        } catch (visionError) {
+          console.warn("Vision API failed, falling back to OCR:", visionError.message);
+        }
+        
+        // Also run OCR as backup/complement
+        try {
+          const processedImage = await sharp(file.buffer)
+            .greyscale()
+            .normalize()
+            .sharpen()
+            .toBuffer();
+          
+          console.log("Running OCR for estate check with handwriting support...");
+          const { data: { text: ocrResult } } = await Tesseract.recognize(processedImage, 'eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
+              }
+            },
+            tessedit_pageseg_mode: '6',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
+            preserve_interword_spaces: '1'
+          });
+          ocrText = ocrResult || "";
+          console.log("OCR completed for estate check. Text length:", ocrText.length);
+        } catch (ocrError) {
+          console.warn("OCR failed:", ocrError.message);
+        }
+        
+        // Combine both sources - prefer Vision API if available
+        text = visionText || ocrText || "";
+        if (visionText && ocrText) {
+          // Merge both for comprehensive extraction
+          text = visionText + "\n\n[Additional OCR text:]\n" + ocrText;
+        }
+        console.log("✅ Combined text extraction complete, total length:", text.length);
+      } catch (error) {
+        console.error("Image processing error:", error);
+        return res.status(400).json({
+          isEstateDocument: false,
+          documentType: null,
+          error: "Could not extract text from image: " + (error.message || "Unknown error"),
         });
       }
     } else {
@@ -593,7 +767,29 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
       });
     }
 
+    // If we have an image and Vision API worked, also try visual classification
+    let visionClassification = null;
+    if (isImage && text && text.length > 0) {
+      try {
+        console.log("🔍 Attempting visual classification with Vision API for estate document...");
+        const { analyzeWithVision } = require('./api/vision-utils');
+        visionClassification = await analyzeWithVision(file.buffer, 'ESTATE', '');
+        console.log("✅ Vision classification result:", visionClassification);
+      } catch (visionError) {
+        console.warn("Vision classification failed, using text-only:", visionError.message);
+      }
+    }
+
     if (!text || text.trim().length === 0) {
+      // If Vision API gave us a classification, use it even without text
+      if (visionClassification) {
+        return res.json({
+          isEstateDocument: visionClassification.isEstateDocument || false,
+          documentType: visionClassification.documentType || null,
+          detectedState: visionClassification.detectedState || null,
+          confidence: visionClassification.confidence || 'medium'
+        });
+      }
       return res.status(400).json({
         isEstateDocument: false,
         documentType: null,
@@ -659,13 +855,24 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
       });
     }
 
-    // Return with detected state
-    res.json({
-      isEstateDocument: parsed.isEstateDocument,
-      documentType: parsed.documentType,
-      detectedState: parsed.detectedState || null,
-      confidence: parsed.confidence
-    });
+    // Merge Vision API classification if available (prefer Vision for handwriting/signatures)
+    if (visionClassification && visionClassification.confidence === 'high') {
+      // Use Vision API result if it has high confidence
+      res.json({
+        isEstateDocument: visionClassification.isEstateDocument || parsed.isEstateDocument,
+        documentType: visionClassification.documentType || parsed.documentType,
+        detectedState: visionClassification.detectedState || parsed.detectedState || null,
+        confidence: visionClassification.confidence || parsed.confidence
+      });
+    } else {
+      // Return with detected state from text analysis
+      res.json({
+        isEstateDocument: parsed.isEstateDocument,
+        documentType: parsed.documentType,
+        detectedState: parsed.detectedState || null,
+        confidence: parsed.confidence
+      });
+    }
   } catch (err) {
     console.error("Error in /check-estate:", err);
     res.status(500).json({
