@@ -32,3 +32,4 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { initSupabase, getSupabase: () => supabase };
 }
 
+

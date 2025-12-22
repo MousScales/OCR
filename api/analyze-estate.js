@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('🚀 analyze-poa function called');
+  console.log('🚀 analyze-estate function called');
   console.log('📋 Method:', req.method);
 
   try {
@@ -117,20 +117,29 @@ module.exports = async (req, res) => {
 
     // Call OpenAI
     console.log('🤖 Calling OpenAI for analysis...');
-    const systemPrompt = `You are a paralegal assistant helping review Power of Attorney (POA) documents. You are not a lawyer and do not give legal advice.
-Given the raw text of a POA and the U.S. state, respond ONLY with valid JSON, no extra text.
+    const systemPrompt = `You are a paralegal assistant helping review court-issued estate documents (letters of administration, letters testamentary, etc.). You are not a lawyer and do not give legal advice.
+Given the raw text of a court-issued estate document and the U.S. state, respond ONLY with valid JSON, no extra text.
 JSON format:
 {
   "extractedFields": {
-    "principalAddress": string | null,
-    "agentAddress": string | null,
-    "principalName": string | null,
-    "agentNames": string[],
-    "successorAgents": string[],
-    "stateJurisdiction": string[],
-    "executionDate": string | null,
-    "notarizationDate": string | null,
-    "signatureDetected": boolean
+    "documentType": string | null,
+    "estateName": string | null,
+    "decedentName": string | null,
+    "representativeNames": string[],
+    "typeOfAdministration": string | null,
+    "administrationLimitations": string | null,
+    "requiresCourtApproval": boolean | null,
+    "state": string | null,
+    "courtName": string | null,
+    "judgeName": string | null,
+    "judgeSignatureDetected": boolean,
+    "effectiveDate": string | null,
+    "judgeSignatureDate": string | null,
+    "stampOrSealDetected": boolean,
+    "expirationDate": string | null,
+    "terminationClauses": string[],
+    "pageCount": string | null,
+    "completenessCheck": string | null
   },
   "summary": string,
   "overallAssessment": string,  // short overall view of whether it appears compliant for that specific state, considering state-specific requirements
@@ -138,9 +147,33 @@ JSON format:
   "issues": string[],
   "recommendations": string[],
   "disclaimer": string
-}`;
+}
 
-    const userPrompt = `State: ${state}\n\nAnalyze this POA document text according to the schema above:\n\n${text.slice(0, 12000)}`;
+Extraction guidelines:
+- documentType: Look for "Executor", "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority". Flag if misclassified.
+- estateName: Look for "Estate of [Name]" or the name of the decedent
+- decedentName: Full legal name of the deceased individual
+- representativeNames: Names of appointed representative(s) - look for "executor", "representative", "executrix", "personal representative", "appoints"
+- typeOfAdministration: Look for "unsupervised", "supervised", "formal unsupervised", "formal supervised"
+- administrationLimitations: Any limitations or restrictions mentioned
+- requiresCourtApproval: Whether actions require court approval
+- state: State where the court is located
+- courtName: Name of the court issuing the document
+- judgeName: Name of the judge signing the document
+- judgeSignatureDetected: Whether judge's signature is present
+- effectiveDate: Explicit effective date if stated, otherwise use judge signature date
+- judgeSignatureDate: Date the judge signed the document
+- stampOrSealDetected: Whether a stamp or seal is present
+- expirationDate: Expiration date if stated
+- terminationClauses: Any termination clauses or conditions
+- pageCount: "Page X of Y" format if available
+- completenessCheck: Verify all pages present, flag missing or out-of-order pages
+
+When analyzing compliance, consider state-specific requirements for estate documents including: required document format, signature requirements, notarization rules, court approval processes, administration types (supervised vs unsupervised), limitations on representative authority, state-specific terminology, and any unique state procedures or requirements.`;
+
+    const userPrompt = `State: ${state}\n\nAnalyze this court-issued estate document text according to the schema above, focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). 
+Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. 
+Identify what might need to be corrected or added to ensure compliance with ${state} state law.\n\nDocument text:\n\n${text.slice(0, 12000)}`;
 
     let completion;
     try {
@@ -197,3 +230,4 @@ JSON format:
     });
   }
 };
+

@@ -10,3 +10,4 @@ CREATE INDEX IF NOT EXISTS idx_documents_file_path ON documents(file_path);
 -- Note: You'll also need to create a Storage bucket named 'documents' in Supabase
 -- Go to Storage -> Create Bucket -> Name: 'documents' -> Public: Yes
 
+

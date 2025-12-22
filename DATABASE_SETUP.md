@@ -92,3 +92,4 @@ If you get permission errors, you may need to adjust the RLS policy in Supabase:
 2. Find the `documents` table
 3. Adjust policies as needed
 
+

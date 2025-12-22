@@ -607,121 +607,12 @@
         fill: #f9fafb;
       }
 
-      .pin-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      }
-
-      .pin-container {
-        background: #ffffff;
-        padding: 40px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        text-align: center;
-        max-width: 400px;
-        width: 90%;
-      }
-
-      .pin-title {
-        font-size: 24px;
-        font-weight: 600;
-        color: #111827;
-        margin-bottom: 8px;
-      }
-
-      .pin-subtitle {
-        font-size: 14px;
-        color: #6b7280;
-        margin-bottom: 24px;
-      }
-
-      .pin-input {
-        width: 100%;
-        padding: 12px 16px;
-        font-size: 18px;
-        text-align: center;
-        letter-spacing: 8px;
-        border: 2px solid #e5e7eb;
-        border-radius: 8px;
-        outline: none;
-        transition: border-color 0.2s ease;
-        font-family: monospace;
-        margin-bottom: 16px;
-      }
-
-      .pin-input:focus {
-        border-color: #1d4ed8;
-      }
-
-      .pin-error {
-        color: #b91c1c;
-        font-size: 13px;
-        margin-bottom: 16px;
-        min-height: 20px;
-        display: none;
-      }
-
-      .pin-error.show {
-        display: block;
-      }
-
-      .pin-submit {
-        width: 100%;
-        padding: 12px;
-        font-size: 14px;
-        font-weight: 500;
-        color: #ffffff;
-        background: #1d4ed8;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.2s ease;
-      }
-
-      .pin-submit:hover {
-        background: #1e40af;
-      }
-
-      .pin-submit:active {
-        background: #1e3a8a;
-      }
-
       .main-content {
-        display: none;
-      }
-
-      .main-content.authenticated {
         display: flex;
       }
     </style>
   </head>
   <body>
-    <!-- PIN Entry Overlay -->
-    <div class="pin-overlay" id="pin-overlay">
-      <div class="pin-container">
-        <div class="pin-title">Enter PIN</div>
-        <div class="pin-subtitle">Please enter your PIN to access the site</div>
-        <input
-          type="password"
-          class="pin-input"
-          id="pin-input"
-          placeholder="Enter PIN"
-          maxlength="10"
-          autocomplete="off"
-        />
-        <div class="pin-error" id="pin-error">Incorrect PIN. Please try again.</div>
-        <button class="pin-submit" id="pin-submit">Submit</button>
-      </div>
-    </div>
-
     <div class="card main-content" id="main-content">
       <div class="main-layout">
         <div class="column column-left" id="column-left">
@@ -949,7 +840,7 @@
       <div class="controls">
             <input id="file-input" type="file" accept="application/pdf,image/png,image/jpeg,image/jpg,image/gif,image/webp" />
               <button id="select-btn" type="button">
-                <span>Select POA</span>
+                <span id="select-doc-text">Select POA</span>
         </button>
         <div id="file-name" class="file-name">No file selected</div>
       </div>
@@ -988,57 +879,13 @@
       window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
       
       // Create Supabase client
-      let supabase = null;
+      window.supabaseClient = null;
       if (window.supabase) {
-        supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
         console.log('Supabase client initialized');
       }
     </script>
     <script>
-      // PIN Authentication
-      const CORRECT_PIN = "11335";
-      const PIN_KEY = "site_authenticated";
-
-      // Check if user is authenticated
-      function checkAuthentication() {
-        const authenticated = sessionStorage.getItem(PIN_KEY) === "true";
-        if (authenticated) {
-          document.getElementById("pin-overlay").style.display = "none";
-          document.getElementById("main-content").classList.add("authenticated");
-        } else {
-          document.getElementById("pin-overlay").style.display = "flex";
-          document.getElementById("main-content").classList.remove("authenticated");
-        }
-      }
-
-      // Handle PIN submission
-      function handlePinSubmit() {
-        const pinInput = document.getElementById("pin-input");
-        const pinError = document.getElementById("pin-error");
-        const enteredPin = pinInput.value;
-
-        if (enteredPin === CORRECT_PIN) {
-          sessionStorage.setItem(PIN_KEY, "true");
-          pinError.classList.remove("show");
-          pinInput.value = "";
-          checkAuthentication();
-        } else {
-          pinError.classList.add("show");
-          pinInput.value = "";
-          pinInput.focus();
-        }
-      }
-
-      // Initialize PIN authentication
-      document.getElementById("pin-submit").addEventListener("click", handlePinSubmit);
-      document.getElementById("pin-input").addEventListener("keypress", function (e) {
-        if (e.key === "Enter") {
-          handlePinSubmit();
-        }
-      });
-
-      // Check authentication on page load
-      checkAuthentication();
 
       (function () {
         const stateItems = document.querySelectorAll(".state-item");
@@ -1074,6 +921,12 @@
         // Get section from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
         const currentSection = urlParams.get('section') || 'poa';
+        
+        // Update button text based on section
+        const selectDocText = document.getElementById('select-doc-text');
+        if (selectDocText) {
+          selectDocText.textContent = currentSection === 'section2' ? 'Select Estate Document' : 'Select POA';
+        }
 
         // Function to save document to Supabase and localStorage
         async function saveDocumentToStorage(file) {
@@ -1095,7 +948,8 @@
             }
 
             // Save to Supabase Storage if available
-            if (supabase) {
+            if (window.supabaseClient) {
+              const supabase = window.supabaseClient;
               try {
                 console.log('📤 Uploading file to Supabase Storage...');
                 
@@ -1168,10 +1022,6 @@
                 }
               } catch (supabaseError) {
                 console.error('Error uploading to Supabase Storage:', supabaseError);
-              }
-            }
-              } catch (supabaseError) {
-                console.error('Supabase save error:', supabaseError);
               }
             }
           } catch (e) {
@@ -1287,7 +1137,8 @@
           if (!poaStatus) return;
 
           poaStatus.className = "poa-status checking";
-          poaStatus.innerHTML = "Checking if this is a POA<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>";
+          const checkingText = currentSection === 'section2' ? 'Checking if this is an Estate Document' : 'Checking if this is a POA';
+          poaStatus.innerHTML = `${checkingText}<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>`;
           analyzeBtn.disabled = true;
           isPOA = false;
 
@@ -1313,10 +1164,11 @@
               controller.abort();
             }, timeoutDuration);
 
-            // Always use /api/check-poa - works with both Vercel dev and production
-            const fullUrl = '/api/check-poa';
+            // Use estate check endpoint for section2, POA check endpoint for poa section
+            const checkEndpoint = currentSection === 'section2' ? '/api/check-estate' : '/api/check-poa';
+            const fullUrl = checkEndpoint;
             
-            console.log('🔍 Checking if document is POA...');
+            console.log('🔍 Checking if document is valid...');
             console.log('📍 API URL:', fullUrl);
             console.log('📄 File:', file.name, 'Type:', file.type, 'Size:', file.size);
             console.log('⏱️ Timeout set to:', timeoutDuration / 1000, 'seconds');
@@ -1376,28 +1228,34 @@
             }
 
             const data = await resp.json();
-            console.log('✅ POA Check Response:', data);
+            console.log('✅ Document Check Response:', data);
             
             if (data.error) {
-              console.error('❌ POA Check Error:', data.error);
+              console.error('❌ Document Check Error:', data.error);
               throw new Error(data.error);
             }
             
-            if (data.isPOA) {
-              console.log('✅ Document IS a POA:', data.poaType || 'Unknown type');
-              isPOA = true;
+            // Check if document is valid based on section type
+            const isValid = currentSection === 'section2' ? data.isEstateDocument : data.isPOA;
+            const documentType = currentSection === 'section2' ? data.documentType : data.poaType;
+            
+            if (isValid) {
+              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
+              console.log(`✅ Document IS a ${docTypeLabel}:`, documentType || 'Unknown type');
+              isPOA = true; // Reuse isPOA flag for both types
               poaStatus.className = "poa-status is-poa";
-              const poaTypeText = data.poaType ? ` (${data.poaType})` : "";
-              poaStatus.textContent = `This is a POA${poaTypeText}`;
+              const typeText = documentType ? ` (${documentType})` : "";
+              poaStatus.textContent = `This is a ${docTypeLabel}${typeText}`;
               if (selectedState) {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.add("show");
               }
             } else {
-              console.log('❌ Document is NOT a POA');
+              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
+              console.log(`❌ Document is NOT a ${docTypeLabel}`);
               isPOA = false;
               poaStatus.className = "poa-status not-poa";
-              poaStatus.textContent = "This isn't a POA";
+              poaStatus.textContent = `This isn't a ${docTypeLabel}`;
               analyzeBtn.disabled = true;
               analyzeBtn.classList.remove("show");
             }
@@ -1594,20 +1452,23 @@
           }
           if (!isPOA) {
             if (stateError) {
-              stateError.textContent = "This file is not a POA";
+              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
+              stateError.textContent = `This file is not a ${docTypeLabel}`;
             }
             return;
           }
 
           if (!file) {
             if (stateError) {
-              stateError.textContent = "Select POA first";
+              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
+              stateError.textContent = `Select ${docTypeLabel} first`;
             }
             return;
           }
           if (!isPOA) {
             if (stateError) {
-              stateError.textContent = "This file is not a POA";
+              const docTypeLabel = currentSection === 'section2' ? 'Estate Document' : 'POA';
+              stateError.textContent = `This file is not a ${docTypeLabel}`;
             }
             return;
           }
@@ -1622,12 +1483,13 @@
           formData.append("file", file);
 
           try {
-            // Always use /api/analyze-poa - works with both Vercel dev and production
-            const fullUrl = '/api/analyze-poa';
+            // Use estate endpoint for section2, POA endpoint for poa section
+            const apiEndpoint = currentSection === 'section2' ? '/api/analyze-estate' : '/api/analyze-poa';
+            const fullUrl = apiEndpoint;
             
-            console.log('🔬 Starting POA analysis...');
+            console.log('🔬 Starting analysis...');
             console.log('📍 API URL:', fullUrl);
-            console.log('📄 File:', file.name, 'State:', selectedState);
+            console.log('📄 File:', file.name, 'State:', selectedState, 'Section:', currentSection);
             
             const resp = await fetch(fullUrl, {
               method: "POST",
@@ -1706,7 +1568,8 @@
               analysisBody.classList.remove("analysis-empty", "analysis-analyzing");
 
               // Save analysis to Supabase if available
-              if (supabase && file) {
+              if (window.supabaseClient && file) {
+                const supabase = window.supabaseClient;
                 try {
                   // Find the document in Supabase by name and update with analysis
                   const { data: docs, error: findError } = await supabase
@@ -1755,17 +1618,87 @@
                   ? a.recommendations
                   : [];
 
-              // Extract fields
+              // Extract fields - check if this is an estate document or POA
               const fields = a.extractedFields || {};
-              const principalAddress = escapeHtml(fields.principalAddress || "Not found");
-              const agentAddress = escapeHtml(fields.agentAddress || "Not found");
-              const principalName = escapeHtml(fields.principalName || "Not found");
-              const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
-              const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
-              const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
-              const executionDate = escapeHtml(fields.executionDate || "Not found");
-              const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
-              const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
+              const isEstateDocument = currentSection === 'section2';
+              
+              let extractedFieldsHtml = '';
+              
+              if (isEstateDocument) {
+                // Estate document fields
+                const documentType = escapeHtml(fields.documentType || "Not found");
+                const estateName = escapeHtml(fields.estateName || "Not found");
+                const decedentName = escapeHtml(fields.decedentName || "Not found");
+                const representativeNames = Array.isArray(fields.representativeNames) && fields.representativeNames.length ? fields.representativeNames : ["Not found"];
+                const typeOfAdministration = escapeHtml(fields.typeOfAdministration || "Not found");
+                const administrationLimitations = escapeHtml(fields.administrationLimitations || "None");
+                const requiresCourtApproval = fields.requiresCourtApproval === true ? "Yes" : (fields.requiresCourtApproval === false ? "No" : "Not specified");
+                const state = escapeHtml(fields.state || "Not found");
+                const courtName = escapeHtml(fields.courtName || "Not found");
+                const judgeName = escapeHtml(fields.judgeName || "Not found");
+                const judgeSignatureDetected = fields.judgeSignatureDetected === true ? "Yes" : "No";
+                const effectiveDate = escapeHtml(fields.effectiveDate || "Not found");
+                const judgeSignatureDate = escapeHtml(fields.judgeSignatureDate || "Not found");
+                const stampOrSealDetected = fields.stampOrSealDetected === true ? "Yes" : "No";
+                const expirationDate = escapeHtml(fields.expirationDate || "Not specified");
+                const terminationClauses = Array.isArray(fields.terminationClauses) ? fields.terminationClauses : [];
+                const pageCount = escapeHtml(fields.pageCount || "Not found");
+                const completenessCheck = escapeHtml(fields.completenessCheck || "Not verified");
+
+                extractedFieldsHtml = `
+                  <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+                    <div style="display: grid; gap: 12px;">
+                      <div><strong style="color: #111827;">Document Type:</strong> <span style="color: #374151;">${documentType}</span></div>
+                      <div><strong style="color: #111827;">Estate Name:</strong> <span style="color: #374151;">${estateName}</span></div>
+                      <div><strong style="color: #111827;">Decedent Name:</strong> <span style="color: #374151;">${decedentName}</span></div>
+                      <div><strong style="color: #111827;">Representative Name(s):</strong> <span style="color: #374151;">${representativeNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Type of Administration:</strong> <span style="color: #374151;">${typeOfAdministration}</span></div>
+                      <div><strong style="color: #111827;">Administration Limitations:</strong> <span style="color: #374151;">${administrationLimitations}</span></div>
+                      <div><strong style="color: #111827;">Requires Court Approval:</strong> <span style="color: #374151;">${requiresCourtApproval}</span></div>
+                      <div><strong style="color: #111827;">State:</strong> <span style="color: #374151;">${state}</span></div>
+                      <div><strong style="color: #111827;">Court Name:</strong> <span style="color: #374151;">${courtName}</span></div>
+                      <div><strong style="color: #111827;">Judge Name:</strong> <span style="color: #374151;">${judgeName}</span></div>
+                      <div><strong style="color: #111827;">Judge Signature Detected:</strong> <span style="color: #374151;">${judgeSignatureDetected}</span></div>
+                      <div><strong style="color: #111827;">Effective Date:</strong> <span style="color: #374151;">${effectiveDate}</span></div>
+                      <div><strong style="color: #111827;">Judge Signature Date:</strong> <span style="color: #374151;">${judgeSignatureDate}</span></div>
+                      <div><strong style="color: #111827;">Stamp or Seal Detected:</strong> <span style="color: #374151;">${stampOrSealDetected}</span></div>
+                      <div><strong style="color: #111827;">Expiration Date:</strong> <span style="color: #374151;">${expirationDate}</span></div>
+                      <div><strong style="color: #111827;">Termination Clauses:</strong> <span style="color: #374151;">${terminationClauses.length > 0 ? terminationClauses.map(c => escapeHtml(c)).join(", ") : "None"}</span></div>
+                      <div><strong style="color: #111827;">Page Count:</strong> <span style="color: #374151;">${pageCount}</span></div>
+                      <div><strong style="color: #111827;">Completeness Check:</strong> <span style="color: #374151;">${completenessCheck}</span></div>
+                    </div>
+                  </div>
+                `;
+              } else {
+                // POA document fields
+                const principalAddress = escapeHtml(fields.principalAddress || "Not found");
+                const agentAddress = escapeHtml(fields.agentAddress || "Not found");
+                const principalName = escapeHtml(fields.principalName || "Not found");
+                const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
+                const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
+                const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
+                const executionDate = escapeHtml(fields.executionDate || "Not found");
+                const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
+                const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
+
+                extractedFieldsHtml = `
+                  <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+                    <div style="display: grid; gap: 12px;">
+                      <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
+                      <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
+                      <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
+                      <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
+                      <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
+                      <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
+                      <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+                    </div>
+                  </div>
+                `;
+              }
 
               const summary = escapeHtml(a.summary || "No summary provided.");
               const overall = escapeHtml(
@@ -1777,20 +1710,7 @@
               );
 
               analysisBody.innerHTML = `
-                <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
-                  <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
-                  <div style="display: grid; gap: 12px;">
-                    <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
-                    <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
-                    <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
-                    <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
-                    <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
-                    <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
-                    <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
-                    <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
-                    <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
-                  </div>
-                </div>
+                ${extractedFieldsHtml}
                 <div style="margin-bottom: 12px; margin-top: 20px;"><strong style="color: #111827;">Summary:</strong> <span style="color: #374151;">${summary}</span></div>
                 <div style="margin-bottom: 12px;"><strong style="color: #111827;">Overall Assessment:</strong> <span style="color: #374151;">${overall}</span></div>
                 <div class="analysis-grid" style="margin-top: 12px;">

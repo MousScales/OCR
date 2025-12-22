@@ -24,14 +24,12 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('🚀 analyze-poa function called');
-  console.log('📋 Method:', req.method);
+  console.log('🚀 check-estate function called');
 
   try {
     // Parse multipart form data
-    const { fields, file } = await new Promise((resolve, reject) => {
+    const { file } = await new Promise((resolve, reject) => {
       const busboy = Busboy({ headers: req.headers });
-      const fields = {};
       let file = null;
       let finished = false;
 
@@ -41,10 +39,6 @@ module.exports = async (req, res) => {
           reject(new Error('Form parsing timeout'));
         }
       }, 10000);
-
-      busboy.on('field', (name, value) => {
-        fields[name] = value;
-      });
 
       busboy.on('file', (name, stream, info) => {
         const chunks = [];
@@ -64,7 +58,7 @@ module.exports = async (req, res) => {
         if (!finished) {
           finished = true;
           clearTimeout(timeout);
-          resolve({ fields, file });
+          resolve({ file });
         }
       });
 
@@ -79,19 +73,21 @@ module.exports = async (req, res) => {
       req.pipe(busboy);
     });
 
-    const state = fields.state;
-    if (!state || !file) {
+    if (!file) {
       return res.status(400).json({
-        error: "Missing state or file"
+        isEstateDocument: false,
+        documentType: null,
+        error: "Missing file"
       });
     }
 
     console.log('✅ File received:', file.originalname, file.mimetype, file.size, 'bytes');
-    console.log('✅ State:', state);
 
     // Check file size
     if (file.size > 10 * 1024 * 1024) {
       return res.status(400).json({
+        isEstateDocument: false,
+        documentType: null,
         error: "File too large (max 10MB)"
       });
     }
@@ -105,42 +101,42 @@ module.exports = async (req, res) => {
     } catch (extractError) {
       console.error('❌ Text extraction error:', extractError);
       return res.status(400).json({
+        isEstateDocument: false,
+        documentType: null,
         error: extractError.message || "Failed to extract text"
       });
     }
 
     if (!text || text.trim().length === 0) {
       return res.status(400).json({
+        isEstateDocument: false,
+        documentType: null,
         error: "No text found in document"
       });
     }
 
     // Call OpenAI
-    console.log('🤖 Calling OpenAI for analysis...');
-    const systemPrompt = `You are a paralegal assistant helping review Power of Attorney (POA) documents. You are not a lawyer and do not give legal advice.
-Given the raw text of a POA and the U.S. state, respond ONLY with valid JSON, no extra text.
+    console.log('🤖 Calling OpenAI for classification...');
+    const systemPrompt = `You are a document classifier. Analyze the provided document text and determine if it is a court-issued estate document (letters of administration, letters testamentary, letters of office, certification of qualification/administration, letters of authority).
+Respond ONLY with valid JSON, no extra text.
 JSON format:
 {
-  "extractedFields": {
-    "principalAddress": string | null,
-    "agentAddress": string | null,
-    "principalName": string | null,
-    "agentNames": string[],
-    "successorAgents": string[],
-    "stateJurisdiction": string[],
-    "executionDate": string | null,
-    "notarizationDate": string | null,
-    "signatureDetected": boolean
-  },
-  "summary": string,
-  "overallAssessment": string,  // short overall view of whether it appears compliant for that specific state, considering state-specific requirements
-  "strengths": string[],
-  "issues": string[],
-  "recommendations": string[],
-  "disclaimer": string
-}`;
+  "isEstateDocument": boolean,
+  "documentType": string | null,
+  "confidence": "high" | "medium" | "low"
+}
 
-    const userPrompt = `State: ${state}\n\nAnalyze this POA document text according to the schema above:\n\n${text.slice(0, 12000)}`;
+Document types to look for:
+- "Letters of Administration"
+- "Letters Testamentary"
+- "Letters of Office"
+- "Certification of Qualification/Administration"
+- "Letters of Authority"
+- "Executor" (if it's a court-issued letter appointing an executor)
+
+Note: Small estate affidavits are NOT court-issued documents and should return isEstateDocument: false.`;
+
+    const userPrompt = `Analyze this document text and determine if it is a court-issued estate document:\n\n${text.slice(0, 8000)}`;
 
     let completion;
     try {
@@ -151,12 +147,14 @@ JSON format:
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.2,
-        max_tokens: 2000
+        temperature: 0.1,
+        max_tokens: 200
       });
     } catch (openaiError) {
       console.error('❌ OpenAI error:', openaiError);
       return res.status(500).json({
+        isEstateDocument: false,
+        documentType: null,
         error: "AI service error"
       });
     }
@@ -164,6 +162,8 @@ JSON format:
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
       return res.status(500).json({
+        isEstateDocument: false,
+        documentType: null,
         error: "No response from AI"
       });
     }
@@ -183,17 +183,22 @@ JSON format:
     } catch (parseError) {
       console.error('❌ JSON parse error:', parseError, 'Raw:', raw);
       return res.status(500).json({
+        isEstateDocument: false,
+        documentType: null,
         error: "Invalid AI response format"
       });
     }
 
-    console.log('✅ Analysis complete');
-    return res.status(200).json({ analysis: parsed });
+    console.log('✅ Classification complete');
+    return res.status(200).json(parsed);
 
   } catch (error) {
     console.error('❌ Function error:', error);
     return res.status(500).json({
+      isEstateDocument: false,
+      documentType: null,
       error: error.message || "Internal server error"
     });
   }
 };
+

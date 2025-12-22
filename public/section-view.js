@@ -2,56 +2,25 @@
 window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
 window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
 
-// Create Supabase client
-let supabase = null;
+// Create Supabase client (use var to allow redeclaration if needed)
+var supabase = null;
 if (window.supabase) {
   supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   console.log('Supabase client initialized');
 }
 
-// PIN Authentication
-const CORRECT_PIN = "11335";
-const pinOverlay = document.getElementById('pin-overlay');
-const pinInput = document.getElementById('pin-input');
-const pinSubmit = document.getElementById('pin-submit');
-const pinError = document.getElementById('pin-error');
-const mainContent = document.getElementById('main-content');
-
-// Check if already authenticated
-if (sessionStorage.getItem('authenticated') === 'true') {
-  pinOverlay.style.display = 'none';
-  mainContent.classList.add('authenticated');
-} else {
-  pinOverlay.style.display = 'flex';
-  mainContent.classList.remove('authenticated');
-}
-
-pinSubmit.addEventListener('click', () => {
-  const enteredPin = pinInput.value.trim();
-  if (enteredPin === CORRECT_PIN) {
-    sessionStorage.setItem('authenticated', 'true');
-    pinOverlay.style.display = 'none';
-    mainContent.classList.add('authenticated');
-    pinInput.value = '';
-    pinError.classList.remove('show');
-  } else {
-    pinError.classList.add('show');
-    pinInput.value = '';
-    pinInput.focus();
-  }
-});
-
-pinInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    pinSubmit.click();
-  }
-});
-
 // Get section from URL
 const urlParams = new URLSearchParams(window.location.search);
 const section = urlParams.get('section') || 'poa';
 const sectionTitle = document.getElementById('section-title');
-sectionTitle.textContent = section.toUpperCase();
+// Set proper section title
+if (section === 'section2') {
+  sectionTitle.textContent = 'Estate Documents';
+} else if (section === 'poa') {
+  sectionTitle.textContent = 'POA';
+} else {
+  sectionTitle.textContent = section.toUpperCase();
+}
 
 // Current document state
 let currentDocument = null;
@@ -117,9 +86,14 @@ async function loadDocuments() {
     `;
   }).join('');
 
-  // Add click handlers
+  // Add click handlers for document items
   documentsList.querySelectorAll('.document-item').forEach(item => {
-    item.addEventListener('click', function() {
+    item.addEventListener('click', function(e) {
+      // Don't trigger if clicking the delete button
+      if (e.target.classList.contains('delete-document-btn')) {
+        return;
+      }
+      
       documentsList.querySelectorAll('.document-item').forEach(i => i.classList.remove('active'));
       this.classList.add('active');
       
@@ -128,6 +102,25 @@ async function loadDocuments() {
       const docType = this.getAttribute('data-doc-type');
       
       loadDocument(docId, docName, docType);
+    });
+  });
+
+  // Add click handlers for delete buttons
+  documentsList.querySelectorAll('.delete-document-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation(); // Prevent triggering document item click
+      
+      const docId = this.getAttribute('data-doc-id');
+      const filePath = this.getAttribute('data-doc-path');
+      
+      console.log('🗑️ Delete button clicked:', { docId, filePath });
+      
+      if (docId) {
+        deleteDocument(docId, filePath);
+      } else {
+        console.error('❌ Document ID not found');
+        alert('Document ID not found. Cannot delete.');
+      }
     });
   });
 }
@@ -234,7 +227,8 @@ async function loadDocument(docId, docName, docType) {
         } else {
           analysisMeta.textContent = '';
           analysisBody.className = 'analysis-body analysis-empty';
-          analysisBody.textContent = 'No analysis available. Select a state and run analysis below.';
+          const docTypeLabel = section === 'section2' ? 'estate document' : 'POA';
+          analysisBody.textContent = `No ${docTypeLabel} analysis available. Select a state and run analysis below.`;
           analyzeControls.style.display = 'block';
         }
       } else {
@@ -257,7 +251,9 @@ function displayAnalysis(analysis, docName) {
   const analysisBody = document.getElementById('analysis-body');
   const analysisMeta = document.getElementById('analysis-meta');
 
-  analysisMeta.textContent = `Analysis for ${section.toUpperCase()} · ${docName}`;
+  // Set proper analysis meta text based on section
+  const sectionLabel = section === 'section2' ? 'Estate Document' : (section === 'poa' ? 'POA' : section.toUpperCase());
+  analysisMeta.textContent = `Analysis for ${sectionLabel} · ${docName}`;
   analysisBody.classList.remove('analysis-empty', 'analysis-analyzing');
 
   const escapeHtml = (text) => {
@@ -273,35 +269,93 @@ function displayAnalysis(analysis, docName) {
   const recs = Array.isArray(a.recommendations) && a.recommendations.length ? a.recommendations : [];
 
   const fields = a.extractedFields || {};
-  const principalAddress = escapeHtml(fields.principalAddress || "Not found");
-  const agentAddress = escapeHtml(fields.agentAddress || "Not found");
-  const principalName = escapeHtml(fields.principalName || "Not found");
-  const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
-  const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
-  const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
-  const executionDate = escapeHtml(fields.executionDate || "Not found");
-  const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
-  const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
-
   const summary = escapeHtml(a.summary || "No summary provided.");
   const overall = escapeHtml(a.overallAssessment || "No overall assessment provided.");
   const disclaimer = escapeHtml(a.disclaimer || "This is not legal advice. Please consult a licensed attorney in the relevant state.");
 
-  analysisBody.innerHTML = `
-    <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
-      <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
-      <div style="display: grid; gap: 12px;">
-        <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
-        <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
-        <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
-        <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
-        <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
-        <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
-        <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
-        <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
-        <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+  // Check if this is an estate document (section2) or POA document
+  const isEstateDocument = section === 'section2';
+  
+  let extractedFieldsHtml = '';
+  
+  if (isEstateDocument) {
+    // Estate document fields
+    const documentType = escapeHtml(fields.documentType || "Not found");
+    const estateName = escapeHtml(fields.estateName || "Not found");
+    const decedentName = escapeHtml(fields.decedentName || "Not found");
+    const representativeNames = Array.isArray(fields.representativeNames) && fields.representativeNames.length ? fields.representativeNames : ["Not found"];
+    const typeOfAdministration = escapeHtml(fields.typeOfAdministration || "Not found");
+    const administrationLimitations = escapeHtml(fields.administrationLimitations || "None");
+    const requiresCourtApproval = fields.requiresCourtApproval === true ? "Yes" : (fields.requiresCourtApproval === false ? "No" : "Not specified");
+    const state = escapeHtml(fields.state || "Not found");
+    const courtName = escapeHtml(fields.courtName || "Not found");
+    const judgeName = escapeHtml(fields.judgeName || "Not found");
+    const judgeSignatureDetected = fields.judgeSignatureDetected === true ? "Yes" : "No";
+    const effectiveDate = escapeHtml(fields.effectiveDate || "Not found");
+    const judgeSignatureDate = escapeHtml(fields.judgeSignatureDate || "Not found");
+    const stampOrSealDetected = fields.stampOrSealDetected === true ? "Yes" : "No";
+    const expirationDate = escapeHtml(fields.expirationDate || "Not specified");
+    const terminationClauses = Array.isArray(fields.terminationClauses) ? fields.terminationClauses : [];
+    const pageCount = escapeHtml(fields.pageCount || "Not found");
+    const completenessCheck = escapeHtml(fields.completenessCheck || "Not verified");
+
+    extractedFieldsHtml = `
+      <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+        <div style="display: grid; gap: 12px;">
+          <div><strong style="color: #111827;">Document Type:</strong> <span style="color: #374151;">${documentType}</span></div>
+          <div><strong style="color: #111827;">Estate Name:</strong> <span style="color: #374151;">${estateName}</span></div>
+          <div><strong style="color: #111827;">Decedent Name:</strong> <span style="color: #374151;">${decedentName}</span></div>
+          <div><strong style="color: #111827;">Representative Name(s):</strong> <span style="color: #374151;">${representativeNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+          <div><strong style="color: #111827;">Type of Administration:</strong> <span style="color: #374151;">${typeOfAdministration}</span></div>
+          <div><strong style="color: #111827;">Administration Limitations:</strong> <span style="color: #374151;">${administrationLimitations}</span></div>
+          <div><strong style="color: #111827;">Requires Court Approval:</strong> <span style="color: #374151;">${requiresCourtApproval}</span></div>
+          <div><strong style="color: #111827;">State:</strong> <span style="color: #374151;">${state}</span></div>
+          <div><strong style="color: #111827;">Court Name:</strong> <span style="color: #374151;">${courtName}</span></div>
+          <div><strong style="color: #111827;">Judge Name:</strong> <span style="color: #374151;">${judgeName}</span></div>
+          <div><strong style="color: #111827;">Judge Signature Detected:</strong> <span style="color: #374151;">${judgeSignatureDetected}</span></div>
+          <div><strong style="color: #111827;">Effective Date:</strong> <span style="color: #374151;">${effectiveDate}</span></div>
+          <div><strong style="color: #111827;">Judge Signature Date:</strong> <span style="color: #374151;">${judgeSignatureDate}</span></div>
+          <div><strong style="color: #111827;">Stamp or Seal Detected:</strong> <span style="color: #374151;">${stampOrSealDetected}</span></div>
+          <div><strong style="color: #111827;">Expiration Date:</strong> <span style="color: #374151;">${expirationDate}</span></div>
+          <div><strong style="color: #111827;">Termination Clauses:</strong> <span style="color: #374151;">${terminationClauses.length > 0 ? terminationClauses.map(c => escapeHtml(c)).join(", ") : "None"}</span></div>
+          <div><strong style="color: #111827;">Page Count:</strong> <span style="color: #374151;">${pageCount}</span></div>
+          <div><strong style="color: #111827;">Completeness Check:</strong> <span style="color: #374151;">${completenessCheck}</span></div>
+        </div>
       </div>
-    </div>
+    `;
+  } else {
+    // POA document fields
+    const principalAddress = escapeHtml(fields.principalAddress || "Not found");
+    const agentAddress = escapeHtml(fields.agentAddress || "Not found");
+    const principalName = escapeHtml(fields.principalName || "Not found");
+    const agentNames = Array.isArray(fields.agentNames) && fields.agentNames.length ? fields.agentNames : ["Not found"];
+    const successorAgents = Array.isArray(fields.successorAgents) ? fields.successorAgents : [];
+    const stateJurisdiction = Array.isArray(fields.stateJurisdiction) && fields.stateJurisdiction.length ? fields.stateJurisdiction : ["Not found"];
+    const executionDate = escapeHtml(fields.executionDate || "Not found");
+    const notarizationDate = escapeHtml(fields.notarizationDate || "Not found");
+    const signatureDetected = fields.signatureDetected === true ? "Yes" : "No";
+
+    extractedFieldsHtml = `
+      <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
+        <div style="display: grid; gap: 12px;">
+          <div><strong style="color: #111827;">Principal Name:</strong> <span style="color: #374151;">${principalName}</span></div>
+          <div><strong style="color: #111827;">Principal Address:</strong> <span style="color: #374151;">${principalAddress}</span></div>
+          <div><strong style="color: #111827;">Agent Name(s):</strong> <span style="color: #374151;">${agentNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+          <div><strong style="color: #111827;">Agent Address:</strong> <span style="color: #374151;">${agentAddress}</span></div>
+          <div><strong style="color: #111827;">Successor Agent(s):</strong> <span style="color: #374151;">${successorAgents.length > 0 ? successorAgents.map(n => escapeHtml(n)).join(", ") : "None"}</span></div>
+          <div><strong style="color: #111827;">State/Jurisdiction:</strong> <span style="color: #374151;">${stateJurisdiction.map(s => escapeHtml(s)).join(", ")}</span></div>
+          <div><strong style="color: #111827;">Execution Date:</strong> <span style="color: #374151;">${executionDate}</span></div>
+          <div><strong style="color: #111827;">Notarization Date:</strong> <span style="color: #374151;">${notarizationDate}</span></div>
+          <div><strong style="color: #111827;">Signature Detected:</strong> <span style="color: #374151;">${signatureDetected}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  analysisBody.innerHTML = `
+    ${extractedFieldsHtml}
     <div style="margin-bottom: 12px; margin-top: 20px;"><strong style="color: #111827;">Summary:</strong> <span style="color: #374151;">${summary}</span></div>
     <div style="margin-bottom: 12px;"><strong style="color: #111827;">Overall Assessment:</strong> <span style="color: #374151;">${overall}</span></div>
     <div class="analysis-grid" style="margin-top: 12px;">
@@ -346,7 +400,8 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
   }
 
   if (!currentDocument.fileData) {
-    const uploadFile = confirm('File content not available. Would you like to upload the file again to run analysis?');
+    const docTypeLabel = section === 'section2' ? 'estate document' : 'POA';
+    const uploadFile = confirm(`File content not available. Would you like to upload the ${docTypeLabel} file again to run analysis?`);
     if (uploadFile) {
       window.location.href = 'index.html';
       return;
@@ -355,9 +410,10 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
   }
 
   analyzeBtn.disabled = true;
+  const docTypeLabel = section === 'section2' ? 'Estate Document' : 'POA';
   analyzeBtn.textContent = 'Analyzing...';
   analysisBody.className = 'analysis-body analysis-analyzing';
-  analysisBody.innerHTML = 'Analyzing<span class="bouncing-dots"><span>.</span><span>.</span><span>.</span></span>';
+  analysisBody.innerHTML = `Analyzing ${docTypeLabel}<span class="bouncing-dots"><span>.</span><span>.</span><span>.</span></span>`;
   analysisMeta.textContent = '';
 
   try {
@@ -379,7 +435,12 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
     formData.append('state', selectedState);
     formData.append('file', file);
 
-    const resp = await fetch('/api/analyze-poa', {
+    // Use estate endpoint for section2, POA endpoint for poa section
+    const apiEndpoint = section === 'section2' ? '/api/analyze-estate' : '/api/analyze-poa';
+    const docTypeLabel = section === 'section2' ? 'estate document' : 'POA';
+    console.log(`🔬 Starting ${docTypeLabel} analysis...`);
+    console.log(`📍 API endpoint: ${apiEndpoint}`);
+    const resp = await fetch(apiEndpoint, {
       method: 'POST',
       body: formData
     });
@@ -424,7 +485,8 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
   } catch (err) {
     console.error('Analysis error:', err);
     analysisBody.className = 'analysis-body analysis-empty';
-    analysisBody.textContent = 'Error running analysis: ' + (err.message || 'Unknown error');
+    const docTypeLabel = section === 'section2' ? 'estate document' : 'POA';
+    analysisBody.textContent = `Error running ${docTypeLabel} analysis: ` + (err.message || 'Unknown error');
     analysisMeta.textContent = 'Analysis failed';
   } finally {
     analyzeBtn.disabled = false;
@@ -432,8 +494,80 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
   }
 });
 
+// Delete document
+async function deleteDocument(docId, filePath) {
+  console.log('🗑️ deleteDocument called:', { docId, filePath });
+  
+  if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+    console.log('❌ User cancelled deletion');
+    return;
+  }
+
+  if (supabase) {
+    console.log('✅ Supabase client available, proceeding with deletion');
+    try {
+      // Delete from Supabase Storage
+      if (filePath) {
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([filePath]);
+
+        if (storageError) {
+          console.error('Error deleting file from Supabase Storage:', storageError);
+          alert('Error deleting file from storage: ' + storageError.message);
+          return;
+        }
+        console.log('File deleted from Supabase Storage:', filePath);
+      }
+
+      // Delete from Supabase database
+      const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', docId);
+
+      if (dbError) {
+        console.error('Error deleting document from Supabase database:', dbError);
+        alert('Error deleting document from database: ' + dbError.message);
+        return;
+      }
+      console.log('Document deleted from Supabase database:', docId);
+
+      // Remove from local storage and refresh list
+      const currentSection = urlParams.get('section') || 'poa';
+      let localDocs = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+      localDocs = localDocs.filter(doc => doc.id !== docId);
+      localStorage.setItem(`${currentSection}_documents`, JSON.stringify(localDocs));
+
+      // If the deleted document was being viewed, close the viewer
+      if (currentDocument && currentDocument.id === docId) {
+        closeViewer();
+      }
+
+      // Reload the document list
+      loadDocuments();
+    } catch (err) {
+      console.error('Error during document deletion:', err);
+      alert('An unexpected error occurred during deletion: ' + err.message);
+    }
+  } else {
+    // Fallback to localStorage only
+    const currentSection = urlParams.get('section') || 'poa';
+    let localDocs = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+    localDocs = localDocs.filter(doc => doc.id !== docId);
+    localStorage.setItem(`${currentSection}_documents`, JSON.stringify(localDocs));
+    
+    // If the deleted document was being viewed, close the viewer
+    if (currentDocument && currentDocument.id === docId) {
+      closeViewer();
+    }
+    
+    loadDocuments();
+  }
+}
+
 // Close viewer
-document.getElementById('close-viewer-btn').addEventListener('click', function() {
+function closeViewer() {
   const viewerTitle = document.getElementById('viewer-title');
   const viewerPlaceholder = document.getElementById('viewer-placeholder');
   const pdfViewer = document.getElementById('pdf-viewer');
@@ -452,6 +586,10 @@ document.getElementById('close-viewer-btn').addEventListener('click', function()
   analyzeControls.style.display = 'none';
   documentsList.querySelectorAll('.document-item').forEach(item => item.classList.remove('active'));
   currentDocument = null;
+}
+
+document.getElementById('close-viewer-btn').addEventListener('click', function() {
+  closeViewer();
 });
 
 // Back to main

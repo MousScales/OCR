@@ -500,121 +500,12 @@
         }
       }
 
-      .pin-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      }
-
-      .pin-container {
-        background: #ffffff;
-        padding: 40px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        text-align: center;
-        max-width: 400px;
-        width: 90%;
-      }
-
-      .pin-title {
-        font-size: 24px;
-        font-weight: 600;
-        color: #111827;
-        margin-bottom: 8px;
-      }
-
-      .pin-subtitle {
-        font-size: 14px;
-        color: #6b7280;
-        margin-bottom: 24px;
-      }
-
-      .pin-input {
-        width: 100%;
-        padding: 12px 16px;
-        font-size: 18px;
-        text-align: center;
-        letter-spacing: 8px;
-        border: 2px solid #e5e7eb;
-        border-radius: 8px;
-        outline: none;
-        transition: border-color 0.2s ease;
-        font-family: monospace;
-        margin-bottom: 16px;
-      }
-
-      .pin-input:focus {
-        border-color: #1d4ed8;
-      }
-
-      .pin-error {
-        color: #b91c1c;
-        font-size: 13px;
-        margin-bottom: 16px;
-        min-height: 20px;
-        display: none;
-      }
-
-      .pin-error.show {
-        display: block;
-      }
-
-      .pin-submit {
-        width: 100%;
-        padding: 12px;
-        font-size: 14px;
-        font-weight: 500;
-        color: #ffffff;
-        background: #1d4ed8;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.2s ease;
-      }
-
-      .pin-submit:hover {
-        background: #1e40af;
-      }
-
-      .pin-submit:active {
-        background: #1e3a8a;
-      }
-
       .main-content {
-        display: none;
-      }
-
-      .main-content.authenticated {
         display: flex;
       }
     </style>
   </head>
   <body>
-    <!-- PIN Entry Overlay -->
-    <div class="pin-overlay" id="pin-overlay">
-      <div class="pin-container">
-        <div class="pin-title">Enter PIN</div>
-        <div class="pin-subtitle">Please enter your PIN to access the site</div>
-        <input
-          type="password"
-          class="pin-input"
-          id="pin-input"
-          placeholder="Enter PIN"
-          maxlength="10"
-          autocomplete="off"
-        />
-        <div class="pin-error" id="pin-error">Incorrect PIN. Please try again.</div>
-        <button class="pin-submit" id="pin-submit">Submit</button>
-      </div>
-    </div>
-
     <div class="card main-content" id="main-content">
       <div class="main-layout">
         <div class="column column-center">
@@ -633,7 +524,7 @@
 
             <div class="section-card" data-section="section2">
               <div class="section-header">
-                <div class="section-title">Section 2</div>
+                <div class="section-title">Estate Documents</div>
                 <div class="section-count" id="section2-count">0</div>
               </div>
               <div class="documents-list" id="section2-documents">
@@ -742,69 +633,51 @@
       window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
       window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
       
-      // Create Supabase client
-      let supabase = null;
-      if (window.supabase) {
-        supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-        console.log('Supabase client initialized');
+      // Create Supabase client (use var to allow redeclaration if needed)
+      var supabase = null;
+      window.initSupabase = function() {
+        if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
+          try {
+            supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized');
+            return true;
+          } catch (err) {
+            console.error('Error initializing Supabase client:', err);
+            return false;
+          }
+        } else {
+          console.warn('Supabase library not loaded yet');
+          return false;
+        }
+      };
+      
+      // Try to initialize immediately
+      window.initSupabase();
+      
+      // Also try on DOMContentLoaded in case script loads after
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', window.initSupabase);
       }
     </script>
     <script>
-      // PIN Authentication
-      const CORRECT_PIN = "11335";
-      const PIN_KEY = "site_authenticated";
-
-      // Check if user is authenticated
-      function checkAuthentication() {
-        const authenticated = sessionStorage.getItem(PIN_KEY) === "true";
-        if (authenticated) {
-          document.getElementById("pin-overlay").style.display = "none";
-          document.getElementById("main-content").classList.add("authenticated");
-        } else {
-          document.getElementById("pin-overlay").style.display = "flex";
-          document.getElementById("main-content").classList.remove("authenticated");
-        }
-      }
-
-      // Handle PIN submission
-      function handlePinSubmit() {
-        const pinInput = document.getElementById("pin-input");
-        const pinError = document.getElementById("pin-error");
-        const enteredPin = pinInput.value;
-
-        if (enteredPin === CORRECT_PIN) {
-          sessionStorage.setItem(PIN_KEY, "true");
-          pinError.classList.remove("show");
-          pinInput.value = "";
-          checkAuthentication();
-        } else {
-          pinError.classList.add("show");
-          pinInput.value = "";
-          pinInput.focus();
-        }
-      }
-
-      // Initialize PIN authentication
-      document.getElementById("pin-submit").addEventListener("click", handlePinSubmit);
-      document.getElementById("pin-input").addEventListener("keypress", function (e) {
-        if (e.key === "Enter") {
-          handlePinSubmit();
-        }
-      });
-
-      // Check authentication on page load
-      checkAuthentication();
 
       // Initialize storage keys for each section
       const SECTIONS = ["poa", "section2", "section3"];
 
       // Load documents from Supabase and localStorage
       async function loadDocuments() {
+        // Ensure Supabase is initialized
+        if (!supabase || typeof supabase.from !== 'function') {
+          if (window.initSupabase) {
+            window.initSupabase();
+          }
+        }
+        
         SECTIONS.forEach(async (section) => {
           let documents = [];
           
           // Try to load from Supabase first
-          if (supabase) {
+          if (supabase && typeof supabase.from === 'function') {
             try {
               const { data, error } = await supabase
                 .from('documents')

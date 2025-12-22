@@ -65,3 +65,4 @@ Or run the `supabase-storage-migration.sql` file.
 - ✅ More reliable than database storage
 - ✅ Better performance
 
+
