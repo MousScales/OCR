@@ -33,13 +33,19 @@ app.use(
 
 app.use(express.json());
 
-// Redirect root to main.html (before static file serving)
+// Redirect root and index.html to main.html (before static file serving)
 app.get("/", (req, res) => {
   res.redirect("/main.html");
 });
 
+app.get("/index.html", (req, res) => {
+  res.redirect("/main.html");
+});
+
 // Serve static files from the public directory
-app.use(express.static("public"));
+app.use(express.static("public", {
+  index: false // Disable automatic index.html serving
+}));
 
 app.post("/check-poa", upload.single("file"), async (req, res) => {
   try {
