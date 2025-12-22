@@ -66,62 +66,71 @@ app.post("/check-poa", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      // ALWAYS convert PDF to image and use Vision API + text extraction for comprehensive analysis
-      console.log("📸 Converting PDF to image and extracting text with multiple methods...");
+      // FORCE PDF to image conversion first, then fallback to text extraction if it fails
+      console.log("📸 FORCING PDF to image conversion...");
       let pdfText = "";
       let visionText = "";
+      let imageConversionFailed = false;
+      let imageConversionError = "";
       
-      // Method 1: Try standard PDF text extraction
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ PDF text extracted, length:", pdfText.length);
-      } catch (parseError) {
-        console.warn("PDF text extraction failed (may be scanned PDF):", parseError.message);
-      }
-      
-      // Method 2: ALWAYS convert to image and use Vision API
+      // Method 1: FORCE convert to image and use Vision API (REQUIRED)
       try {
         const { pdfToImage, extractTextWithVision } = require('./api/vision-utils');
+        console.log("📸 Converting PDF to image (REQUIRED)...");
         const imageBuffer = await pdfToImage(file.buffer);
+        console.log("✅ PDF converted to image, using Vision API...");
         visionText = await extractTextWithVision(imageBuffer);
         console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
       } catch (visionError) {
-        console.warn("Vision API failed for PDF, trying OCR fallback:", visionError.message);
-        // Fallback: Use OCR on the image
+        imageConversionFailed = true;
+        imageConversionError = visionError.message || "PDF to image conversion failed";
+        console.error("❌ PDF to image conversion FAILED:", imageConversionError);
+        console.error("   Attempting fallback to PDF text extraction...");
+      }
+      
+      // Method 2: Fallback to standard PDF text extraction if image conversion failed
+      if (imageConversionFailed) {
         try {
-          const { pdfToImage } = require('./api/vision-utils');
-          const imageBuffer = await pdfToImage(file.buffer);
-          const processedImage = await sharp(imageBuffer)
-            .greyscale()
-            .normalize()
-            .sharpen()
-            .toBuffer();
-          const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-            tessedit_pageseg_mode: '6',
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-            preserve_interword_spaces: '1'
-          });
-          visionText = ocrText || "";
-          console.log("✅ OCR extracted text from PDF image, length:", visionText.length);
-        } catch (ocrError) {
-          console.error("OCR fallback also failed:", ocrError);
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Fallback: PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.error("❌ PDF text extraction also failed:", parseError.message);
+        }
+      } else {
+        // If image conversion succeeded, also try PDF text extraction for comprehensive analysis
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Additional PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.warn("⚠️ PDF text extraction failed (non-critical):", parseError.message);
         }
       }
       
-      // Combine both sources - prefer Vision API text as it's better for handwriting
+      // Combine both sources
       text = visionText || pdfText || "";
       if (visionText && pdfText) {
         // Merge both for comprehensive extraction
         text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
       }
-      console.log("✅ Combined PDF text extraction complete, total length:", text.length);
+      console.log("✅ PDF text extraction complete, total length:", text.length);
       
+      // If image conversion failed, include warning in response
+      if (imageConversionFailed && text) {
+        console.warn("⚠️ PDF processed with fallback method - image conversion was not available");
+      }
+      
+      // If we have no text at all, return error
       if (!text || text.trim().length === 0) {
+        console.error("❌ All PDF extraction methods failed - no text extracted");
+        const errorMsg = imageConversionFailed 
+          ? `PDF to image conversion failed: ${imageConversionError}. PDF text extraction also failed. The PDF may be corrupted, password-protected, or in an unsupported format.`
+          : "Could not extract any text from PDF. The PDF may be corrupted or password-protected.";
         return res.status(400).json({
           isPOA: false,
           poaType: null,
-          error: "Could not extract any text from PDF using any method.",
+          error: errorMsg,
         });
       }
     } else if (isImage) {
@@ -324,60 +333,69 @@ app.post("/analyze-poa", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      // ALWAYS convert PDF to image and use Vision API + text extraction for comprehensive analysis
-      console.log("📸 Converting PDF to image and extracting text with multiple methods...");
+      // FORCE PDF to image conversion first, then fallback to text extraction if it fails
+      console.log("📸 FORCING PDF to image conversion...");
       let pdfText = "";
       let visionText = "";
+      let imageConversionFailed = false;
+      let imageConversionError = "";
       
-      // Method 1: Try standard PDF text extraction
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ PDF text extracted, length:", pdfText.length);
-      } catch (parseError) {
-        console.warn("PDF text extraction failed (may be scanned PDF):", parseError.message);
-      }
-      
-      // Method 2: ALWAYS convert to image and use Vision API
+      // Method 1: FORCE convert to image and use Vision API (REQUIRED)
       try {
         const { pdfToImage, extractTextWithVision } = require('./api/vision-utils');
+        console.log("📸 Converting PDF to image (REQUIRED)...");
         const imageBuffer = await pdfToImage(file.buffer);
+        console.log("✅ PDF converted to image, using Vision API...");
         visionText = await extractTextWithVision(imageBuffer);
         console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
       } catch (visionError) {
-        console.warn("Vision API failed for PDF, trying OCR fallback:", visionError.message);
-        // Fallback: Use OCR on the image
+        imageConversionFailed = true;
+        imageConversionError = visionError.message || "PDF to image conversion failed";
+        console.error("❌ PDF to image conversion FAILED:", imageConversionError);
+        console.error("   Attempting fallback to PDF text extraction...");
+      }
+      
+      // Method 2: Fallback to standard PDF text extraction if image conversion failed
+      if (imageConversionFailed) {
         try {
-          const { pdfToImage } = require('./api/vision-utils');
-          const imageBuffer = await pdfToImage(file.buffer);
-          const processedImage = await sharp(imageBuffer)
-            .greyscale()
-            .normalize()
-            .sharpen()
-            .toBuffer();
-          const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-            tessedit_pageseg_mode: '6',
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-            preserve_interword_spaces: '1'
-          });
-          visionText = ocrText || "";
-          console.log("✅ OCR extracted text from PDF image, length:", visionText.length);
-        } catch (ocrError) {
-          console.error("OCR fallback also failed:", ocrError);
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Fallback: PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.error("❌ PDF text extraction also failed:", parseError.message);
+        }
+      } else {
+        // If image conversion succeeded, also try PDF text extraction for comprehensive analysis
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Additional PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.warn("⚠️ PDF text extraction failed (non-critical):", parseError.message);
         }
       }
       
-      // Combine both sources - prefer Vision API text as it's better for handwriting
+      // Combine both sources
       text = visionText || pdfText || "";
       if (visionText && pdfText) {
         // Merge both for comprehensive extraction
         text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
       }
-      console.log("✅ Combined PDF text extraction complete, total length:", text.length);
+      console.log("✅ PDF text extraction complete, total length:", text.length);
       
+      // If image conversion failed, include warning in response
+      if (imageConversionFailed && text) {
+        console.warn("⚠️ PDF processed with fallback method - image conversion was not available");
+      }
+      
+      // If we have no text at all, return error
       if (!text || text.trim().length === 0) {
+        console.error("❌ All PDF extraction methods failed - no text extracted");
+        const errorMsg = imageConversionFailed 
+          ? `PDF to image conversion failed: ${imageConversionError}. PDF text extraction also failed. The PDF may be corrupted, password-protected, or in an unsupported format.`
+          : "Could not extract any text from PDF. The PDF may be corrupted or password-protected.";
         return res.status(400).json({
-          error: "Could not extract any text from PDF using any method.",
+          error: errorMsg,
         });
       }
     } else if (isImage) {
@@ -569,60 +587,69 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      // ALWAYS convert PDF to image and use Vision API + text extraction for comprehensive analysis
-      console.log("📸 Converting PDF to image and extracting text with multiple methods...");
+      // FORCE PDF to image conversion first, then fallback to text extraction if it fails
+      console.log("📸 FORCING PDF to image conversion...");
       let pdfText = "";
       let visionText = "";
+      let imageConversionFailed = false;
+      let imageConversionError = "";
       
-      // Method 1: Try standard PDF text extraction
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ PDF text extracted, length:", pdfText.length);
-      } catch (parseError) {
-        console.warn("PDF text extraction failed (may be scanned PDF):", parseError.message);
-      }
-      
-      // Method 2: ALWAYS convert to image and use Vision API
+      // Method 1: FORCE convert to image and use Vision API (REQUIRED)
       try {
         const { pdfToImage, extractTextWithVision } = require('./api/vision-utils');
+        console.log("📸 Converting PDF to image (REQUIRED)...");
         const imageBuffer = await pdfToImage(file.buffer);
+        console.log("✅ PDF converted to image, using Vision API...");
         visionText = await extractTextWithVision(imageBuffer);
         console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
       } catch (visionError) {
-        console.warn("Vision API failed for PDF, trying OCR fallback:", visionError.message);
-        // Fallback: Use OCR on the image
+        imageConversionFailed = true;
+        imageConversionError = visionError.message || "PDF to image conversion failed";
+        console.error("❌ PDF to image conversion FAILED:", imageConversionError);
+        console.error("   Attempting fallback to PDF text extraction...");
+      }
+      
+      // Method 2: Fallback to standard PDF text extraction if image conversion failed
+      if (imageConversionFailed) {
         try {
-          const { pdfToImage } = require('./api/vision-utils');
-          const imageBuffer = await pdfToImage(file.buffer);
-          const processedImage = await sharp(imageBuffer)
-            .greyscale()
-            .normalize()
-            .sharpen()
-            .toBuffer();
-          const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-            tessedit_pageseg_mode: '6',
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-            preserve_interword_spaces: '1'
-          });
-          visionText = ocrText || "";
-          console.log("✅ OCR extracted text from PDF image, length:", visionText.length);
-        } catch (ocrError) {
-          console.error("OCR fallback also failed:", ocrError);
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Fallback: PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.error("❌ PDF text extraction also failed:", parseError.message);
+        }
+      } else {
+        // If image conversion succeeded, also try PDF text extraction for comprehensive analysis
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Additional PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.warn("⚠️ PDF text extraction failed (non-critical):", parseError.message);
         }
       }
       
-      // Combine both sources - prefer Vision API text as it's better for handwriting
+      // Combine both sources
       text = visionText || pdfText || "";
       if (visionText && pdfText) {
         // Merge both for comprehensive extraction
         text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
       }
-      console.log("✅ Combined PDF text extraction complete, total length:", text.length);
+      console.log("✅ PDF text extraction complete, total length:", text.length);
       
+      // If image conversion failed, include warning in response
+      if (imageConversionFailed && text) {
+        console.warn("⚠️ PDF processed with fallback method - image conversion was not available");
+      }
+      
+      // If we have no text at all, return error
       if (!text || text.trim().length === 0) {
+        console.error("❌ All PDF extraction methods failed - no text extracted");
+        const errorMsg = imageConversionFailed 
+          ? `PDF to image conversion failed: ${imageConversionError}. PDF text extraction also failed. The PDF may be corrupted, password-protected, or in an unsupported format.`
+          : "Could not extract any text from PDF. The PDF may be corrupted or password-protected.";
         return res.status(400).json({
-          error: "Could not extract any text from PDF using any method.",
+          error: errorMsg,
         });
       }
     } else if (isImage) {
@@ -816,46 +843,45 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
     let text = "";
     
     if (isPDF) {
-      // ALWAYS convert PDF to image and use Vision API + text extraction for comprehensive analysis
-      console.log("📸 Converting PDF to image and extracting text with multiple methods...");
+      // FORCE PDF to image conversion first, then fallback to text extraction if it fails
+      console.log("📸 FORCING PDF to image conversion...");
       let pdfText = "";
       let visionText = "";
       
-      // Method 1: Try standard PDF text extraction
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ PDF text extracted, length:", pdfText.length);
-      } catch (parseError) {
-        console.warn("PDF text extraction failed (may be scanned PDF):", parseError.message);
-      }
-      
-      // Method 2: ALWAYS convert to image and use Vision API
+      // Method 1: FORCE convert to image and use Vision API (REQUIRED)
+      let imageConversionFailed = false;
+      let imageConversionError = "";
       try {
         const { pdfToImage, extractTextWithVision } = require('./api/vision-utils');
+        console.log("📸 Converting PDF to image (REQUIRED)...");
         const imageBuffer = await pdfToImage(file.buffer);
+        console.log("✅ PDF converted to image, using Vision API...");
         visionText = await extractTextWithVision(imageBuffer);
         console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
       } catch (visionError) {
-        console.warn("Vision API failed for PDF, trying OCR fallback:", visionError.message);
-        // Fallback: Use OCR on the image
+        imageConversionFailed = true;
+        imageConversionError = visionError.message || "PDF to image conversion failed";
+        console.error("❌ PDF to image conversion FAILED:", imageConversionError);
+        console.error("   Attempting fallback to PDF text extraction...");
+      }
+      
+      // Method 2: Fallback to standard PDF text extraction if image conversion failed
+      if (imageConversionFailed) {
         try {
-          const { pdfToImage } = require('./api/vision-utils');
-          const imageBuffer = await pdfToImage(file.buffer);
-          const processedImage = await sharp(imageBuffer)
-            .greyscale()
-            .normalize()
-            .sharpen()
-            .toBuffer();
-          const { data: { text: ocrText } } = await Tesseract.recognize(processedImage, 'eng', {
-            tessedit_pageseg_mode: '6',
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?()-/\'\"',
-            preserve_interword_spaces: '1'
-          });
-          visionText = ocrText || "";
-          console.log("✅ OCR extracted text from PDF image, length:", visionText.length);
-        } catch (ocrError) {
-          console.error("OCR fallback also failed:", ocrError);
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Fallback: PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.error("❌ PDF text extraction also failed:", parseError.message);
+        }
+      } else {
+        // If image conversion succeeded, also try PDF text extraction for comprehensive analysis
+        try {
+          const pdfData = await pdfParse(file.buffer);
+          pdfText = pdfData?.text || "";
+          console.log("✅ Additional PDF text extracted, length:", pdfText.length);
+        } catch (parseError) {
+          console.warn("⚠️ PDF text extraction failed (non-critical):", parseError.message);
         }
       }
       
@@ -865,13 +891,23 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
         // Merge both for comprehensive extraction
         text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
       }
-      console.log("✅ Combined PDF text extraction complete, total length:", text.length);
+      console.log("✅ PDF text extraction complete, total length:", text.length);
       
+      // If image conversion failed, include warning in response
+      if (imageConversionFailed && text) {
+        console.warn("⚠️ PDF processed with fallback method - image conversion was not available");
+      }
+      
+      // If we have no text at all, return error
       if (!text || text.trim().length === 0) {
+        console.error("❌ All PDF extraction methods failed - no text extracted");
+        const errorMsg = imageConversionFailed 
+          ? `PDF to image conversion failed: ${imageConversionError}. PDF text extraction also failed. The PDF may be corrupted, password-protected, or in an unsupported format.`
+          : "Could not extract any text from PDF. The PDF may be corrupted or password-protected.";
         return res.status(400).json({
           isEstateDocument: false,
           documentType: null,
-          error: "Could not extract any text from PDF using any method.",
+          error: errorMsg,
         });
       }
     } else if (isImage) {

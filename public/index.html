@@ -895,8 +895,13 @@
                 preview here.
           <span>Works entirely in your browser using a temporary URL.</span>
         </div>
-        <iframe id="pdf-viewer" class="pdf-viewer"></iframe>
-        <img id="image-viewer" class="image-viewer" alt="Document preview" />
+        <div class="document-container" id="document-container">
+          <iframe id="pdf-viewer" class="pdf-viewer"></iframe>
+          <div class="image-container" id="image-container" style="position: relative; display: none;">
+            <img id="image-viewer" class="image-viewer" alt="Document preview" />
+            <canvas id="annotation-canvas" class="annotation-canvas"></canvas>
+          </div>
+        </div>
       </div>
           </div>
         </div>
@@ -1076,9 +1081,9 @@
             fileInput.value = "";
           fileNameLabel.textContent = "";
             pdfViewer.style.display = "none";
-            const imageViewer = document.getElementById("image-viewer");
-            if (imageViewer) {
-              imageViewer.style.display = "none";
+            const imageContainer = document.getElementById("image-container");
+            if (imageContainer) {
+              imageContainer.style.display = "none";
             }
             placeholder.style.display = "block";
           if (previewWrapper) {
@@ -1422,10 +1427,15 @@
               imageViewer.style.display = "none";
             }
           } else if (file.type.startsWith("image/")) {
+            const imageContainer = document.getElementById("image-container");
             const imageViewer = document.getElementById("image-viewer");
-            if (imageViewer) {
+            if (imageViewer && imageContainer) {
               imageViewer.src = currentObjectUrl;
-              imageViewer.style.display = "block";
+              imageContainer.style.display = "flex";
+              // Wait for image to load, then setup annotation canvas
+              imageViewer.onload = () => {
+                setupAnnotationCanvas(imageViewer);
+              };
             }
             pdfViewer.style.display = "none";
           }
@@ -1759,24 +1769,24 @@
                   <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #111827;">Extracted Information</h3>
                     <div style="display: grid; gap: 12px;">
-                      <div><strong style="color: #111827;">Document Type:</strong> <span style="color: #374151;">${documentType}</span></div>
-                      <div><strong style="color: #111827;">Estate Name:</strong> <span style="color: #374151;">${estateName}</span></div>
-                      <div><strong style="color: #111827;">Decedent Name:</strong> <span style="color: #374151;">${decedentName}</span></div>
-                      <div><strong style="color: #111827;">Representative Name(s):</strong> <span style="color: #374151;">${representativeNames.map(n => escapeHtml(n)).join(", ")}</span></div>
-                      <div><strong style="color: #111827;">Type of Administration:</strong> <span style="color: #374151;">${typeOfAdministration}</span></div>
-                      <div><strong style="color: #111827;">Administration Limitations:</strong> <span style="color: #374151;">${administrationLimitations}</span></div>
-                      <div><strong style="color: #111827;">Requires Court Approval:</strong> <span style="color: #374151;">${requiresCourtApproval}</span></div>
-                      <div><strong style="color: #111827;">State:</strong> <span style="color: #374151;">${state}</span></div>
-                      <div><strong style="color: #111827;">Court Name:</strong> <span style="color: #374151;">${courtName}</span></div>
-                      <div><strong style="color: #111827;">Judge Name:</strong> <span style="color: #374151;">${judgeName}</span></div>
-                      <div><strong style="color: #111827;">Judge Signature Detected:</strong> <span style="color: #374151;">${judgeSignatureDetected}</span></div>
-                      <div><strong style="color: #111827;">Effective Date:</strong> <span style="color: #374151;">${effectiveDate}</span></div>
-                      <div><strong style="color: #111827;">Judge Signature Date:</strong> <span style="color: #374151;">${judgeSignatureDate}</span></div>
-                      <div><strong style="color: #111827;">Stamp or Seal Detected:</strong> <span style="color: #374151;">${stampOrSealDetected}</span></div>
-                      <div><strong style="color: #111827;">Expiration Date:</strong> <span style="color: #374151;">${expirationDate}</span></div>
-                      <div><strong style="color: #111827;">Termination Clauses:</strong> <span style="color: #374151;">${terminationClauses.length > 0 ? terminationClauses.map(c => escapeHtml(c)).join(", ") : "None"}</span></div>
-                      <div><strong style="color: #111827;">Page Count:</strong> <span style="color: #374151;">${pageCount}</span></div>
-                      <div><strong style="color: #111827;">Completeness Check:</strong> <span style="color: #374151;">${completenessCheck}</span></div>
+                      <div><strong style="color: #111827;">Document Type:</strong> <span class="extracted-field-highlight" data-field="documentType" data-value="${documentType}">${documentType}</span></div>
+                      <div><strong style="color: #111827;">Estate Name:</strong> <span class="extracted-field-highlight" data-field="estateName" data-value="${estateName}">${estateName}</span></div>
+                      <div><strong style="color: #111827;">Decedent Name:</strong> <span class="extracted-field-highlight" data-field="decedentName" data-value="${decedentName}">${decedentName}</span></div>
+                      <div><strong style="color: #111827;">Representative Name(s):</strong> <span class="extracted-field-highlight" data-field="representativeNames" data-value="${representativeNames.map(n => escapeHtml(n)).join(", ")}">${representativeNames.map(n => escapeHtml(n)).join(", ")}</span></div>
+                      <div><strong style="color: #111827;">Type of Administration:</strong> <span class="extracted-field-highlight" data-field="typeOfAdministration" data-value="${typeOfAdministration}">${typeOfAdministration}</span></div>
+                      <div><strong style="color: #111827;">Administration Limitations:</strong> <span class="extracted-field-highlight" data-field="administrationLimitations" data-value="${administrationLimitations}">${administrationLimitations}</span></div>
+                      <div><strong style="color: #111827;">Requires Court Approval:</strong> <span class="extracted-field-highlight" data-field="requiresCourtApproval" data-value="${requiresCourtApproval}">${requiresCourtApproval}</span></div>
+                      <div><strong style="color: #111827;">State:</strong> <span class="extracted-field-highlight" data-field="state" data-value="${state}">${state}</span></div>
+                      <div><strong style="color: #111827;">Court Name:</strong> <span class="extracted-field-highlight" data-field="courtName" data-value="${courtName}">${courtName}</span></div>
+                      <div><strong style="color: #111827;">Judge Name:</strong> <span class="extracted-field-highlight" data-field="judgeName" data-value="${judgeName}">${judgeName}</span></div>
+                      <div><strong style="color: #111827;">Judge Signature Detected:</strong> <span class="extracted-field-highlight" data-field="judgeSignatureDetected" data-value="${judgeSignatureDetected}">${judgeSignatureDetected}</span></div>
+                      <div><strong style="color: #111827;">Effective Date:</strong> <span class="extracted-field-highlight" data-field="effectiveDate" data-value="${effectiveDate}">${effectiveDate}</span></div>
+                      <div><strong style="color: #111827;">Judge Signature Date:</strong> <span class="extracted-field-highlight" data-field="judgeSignatureDate" data-value="${judgeSignatureDate}">${judgeSignatureDate}</span></div>
+                      <div><strong style="color: #111827;">Stamp or Seal Detected:</strong> <span class="extracted-field-highlight" data-field="stampOrSealDetected" data-value="${stampOrSealDetected}">${stampOrSealDetected}</span></div>
+                      <div><strong style="color: #111827;">Expiration Date:</strong> <span class="extracted-field-highlight" data-field="expirationDate" data-value="${expirationDate}">${expirationDate}</span></div>
+                      <div><strong style="color: #111827;">Termination Clauses:</strong> <span class="extracted-field-highlight" data-field="terminationClauses" data-value="${terminationClauses.length > 0 ? terminationClauses.map(c => escapeHtml(c)).join(", ") : "None"}">${terminationClauses.length > 0 ? terminationClauses.map(c => escapeHtml(c)).join(", ") : "None"}</span></div>
+                      <div><strong style="color: #111827;">Page Count:</strong> <span class="extracted-field-highlight" data-field="pageCount" data-value="${pageCount}">${pageCount}</span></div>
+                      <div><strong style="color: #111827;">Completeness Check:</strong> <span class="extracted-field-highlight" data-field="completenessCheck" data-value="${completenessCheck}">${completenessCheck}</span></div>
                     </div>
                   </div>
                 `;
@@ -1852,6 +1862,9 @@
                 }
                 <div class="analysis-disclaimer" style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #d1d5db; color: #6b7280; font-size: 11px;">${disclaimer}</div>
               `;
+              
+              // Setup click handlers for field highlighting
+              setupFieldHighlighting();
             }
           } catch (err) {
             try {
@@ -1892,6 +1905,120 @@
             // Prevent crashes when inspecting
           }
         });
+
+        // Setup annotation canvas for image documents
+        function setupAnnotationCanvas(img) {
+          const canvas = document.getElementById("annotation-canvas");
+          if (!canvas || !img) return;
+          
+          const container = img.parentElement;
+          const rect = container.getBoundingClientRect();
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+          canvas.style.width = rect.width + "px";
+          canvas.style.height = rect.height + "px";
+        }
+
+        // Setup field highlighting on document
+        function setupFieldHighlighting() {
+          const highlights = document.querySelectorAll(".extracted-field-highlight");
+          highlights.forEach(highlight => {
+            highlight.addEventListener("click", function() {
+              // Remove active class from all highlights
+              highlights.forEach(h => h.classList.remove("active"));
+              // Add active class to clicked highlight
+              this.classList.add("active");
+              
+              const fieldValue = this.getAttribute("data-value");
+              const fieldName = this.getAttribute("data-field");
+              
+              // Highlight text on document
+              highlightTextOnDocument(fieldValue, fieldName);
+            });
+          });
+        }
+
+        // Highlight text on document (for images)
+        function highlightTextOnDocument(text, fieldName) {
+          const canvas = document.getElementById("annotation-canvas");
+          const img = document.getElementById("image-viewer");
+          
+          if (!canvas || !img || !text || text === "Not found" || text === "Not specified" || text === "None" || text === "Yes" || text === "No") {
+            return;
+          }
+          
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // Get image dimensions and scale
+          const imgRect = img.getBoundingClientRect();
+          const imgNaturalWidth = img.naturalWidth;
+          const imgNaturalHeight = img.naturalHeight;
+          const scaleX = imgRect.width / imgNaturalWidth;
+          const scaleY = imgRect.height / imgNaturalHeight;
+          
+          // Draw highlight box - this is a simplified version
+          // In production, you'd use OCR coordinates or text matching
+          ctx.strokeStyle = "#3b82f6";
+          ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+          ctx.lineWidth = 3;
+          
+          // Draw multiple highlight boxes to show where text might be
+          const boxWidth = Math.min(300, canvas.width * 0.4);
+          const boxHeight = 25;
+          
+          // Top section (header info)
+          if (fieldName.includes("State") || fieldName.includes("Court") || fieldName.includes("Document")) {
+            const x = canvas.width * 0.1;
+            const y = canvas.height * 0.05;
+            ctx.fillRect(x, y, boxWidth, boxHeight);
+            ctx.strokeRect(x, y, boxWidth, boxHeight);
+            ctx.fillStyle = "#1e40af";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(fieldName, x + 5, y + 16);
+          }
+          // Middle section (main content)
+          else if (fieldName.includes("Name") || fieldName.includes("Estate") || fieldName.includes("Decedent")) {
+            const x = canvas.width * 0.1;
+            const y = canvas.height * 0.2;
+            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+            ctx.fillRect(x, y, boxWidth, boxHeight);
+            ctx.strokeRect(x, y, boxWidth, boxHeight);
+            ctx.fillStyle = "#1e40af";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(fieldName, x + 5, y + 16);
+          }
+          // Bottom section (signatures/dates)
+          else if (fieldName.includes("Date") || fieldName.includes("Signature") || fieldName.includes("Seal")) {
+            const x = canvas.width * 0.1;
+            const y = canvas.height * 0.8;
+            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+            ctx.fillRect(x, y, boxWidth, boxHeight);
+            ctx.strokeRect(x, y, boxWidth, boxHeight);
+            ctx.fillStyle = "#1e40af";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(fieldName, x + 5, y + 16);
+          }
+          // Default position
+          else {
+            const x = (canvas.width - boxWidth) / 2;
+            const y = canvas.height * 0.3;
+            ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
+            ctx.fillRect(x, y, boxWidth, boxHeight);
+            ctx.strokeRect(x, y, boxWidth, boxHeight);
+            ctx.fillStyle = "#1e40af";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(fieldName, x + 5, y + 16);
+          }
+          
+          // Scroll to highlight
+          setTimeout(() => {
+            const container = document.getElementById("image-container");
+            if (container) {
+              container.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }, 100);
+        }
       })();
     </script>
   </body>
