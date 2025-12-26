@@ -75,7 +75,14 @@ async function extractTextFromFile(file) {
               throw new Error("No text extracted after cloud conversion");
             }
           } catch (cloudError) {
-            console.error("❌ Cloud conversion also failed:", cloudError.message);
+            const cloudErrorMsg = cloudError.message || "Unknown error";
+            console.error("❌ Cloud conversion also failed:", cloudErrorMsg);
+            
+            // Check if it's an API key issue
+            if (cloudErrorMsg.includes('API key') || cloudErrorMsg.includes('not configured')) {
+              throw new Error("PDF conversion service is not configured. Please set PDF_CO_API_KEY environment variable in Vercel.");
+            }
+            
             // Final fallback: return helpful but user-friendly error
             throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results.");
           }

@@ -20,6 +20,7 @@ async function pdfToImageCloud(pdfBuffer) {
     
     // Use pdf.co API
     try {
+      console.log('📡 Calling pdf.co API for PDF conversion...');
       const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/png', {
         method: 'POST',
         headers: {
@@ -33,25 +34,50 @@ async function pdfToImageCloud(pdfBuffer) {
         })
       });
       
-      if (response.ok) {
-        const result = await response.json();
-        if (result.url && !result.error) {
-          const imageResponse = await fetch(result.url);
-          const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-          const optimized = await sharp(imageBuffer)
-            .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-            .png()
-            .toBuffer();
-          console.log('✅ Cloud PDF conversion successful (pdf.co)');
-          return optimized;
+      console.log('📡 pdf.co API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('❌ pdf.co API error response:', errorText);
+        throw new Error(`pdf.co API returned status ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('📡 pdf.co API result:', JSON.stringify(result).substring(0, 200));
+      
+      if (result.error) {
+        console.error('❌ pdf.co API error:', result.error);
+        throw new Error(`pdf.co API error: ${result.error}`);
+      }
+      
+      if (result.url) {
+        console.log('📥 Downloading converted image from:', result.url);
+        const imageResponse = await fetch(result.url);
+        
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download converted image: ${imageResponse.status}`);
         }
+        
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+        
+        const optimized = await sharp(imageBuffer)
+          .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        
+        console.log('✅ Cloud PDF conversion successful (pdf.co)');
+        return optimized;
+      } else {
+        throw new Error('pdf.co API did not return an image URL');
       }
     } catch (pdfCoError) {
-      console.log('pdf.co conversion failed, trying alternative...');
+      console.error('❌ pdf.co conversion error:', pdfCoError.message || pdfCoError);
+      throw pdfCoError; // Re-throw to be caught by outer catch
     }
     
-    // If pdf.co fails, throw error to trigger next fallback
-    throw new Error('Cloud PDF conversion services unavailable');
+    // If we get here, something unexpected happened
+    throw new Error('Cloud PDF conversion failed: ' + (error.message || 'Unknown error'));
   } catch (error) {
     console.error('Cloud PDF conversion error:', error.message);
     throw error;
