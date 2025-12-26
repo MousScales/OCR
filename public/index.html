@@ -1376,47 +1376,10 @@
             convertedImageFile = new File([blob], currentFile.name.replace(/\.pdf$/i, '.png'), { type: "image/png" });
             console.log("✅ Image file created, size:", convertedImageFile.size, "bytes");
 
-            // Update the preview
-            if (currentObjectUrl) {
-              URL.revokeObjectURL(currentObjectUrl);
-            }
-            currentObjectUrl = URL.createObjectURL(convertedImageFile);
-
-            const imageContainer = document.getElementById("image-container");
-            const imageViewer = document.getElementById("image-viewer");
-            const previewWrapper = document.querySelector(".preview-wrapper");
-            
-            if (imageViewer && imageContainer) {
-              console.log("🖼️ Setting up image viewer...");
-              console.log("   Image URL:", currentObjectUrl);
-              console.log("   Image file size:", convertedImageFile.size, "bytes");
-              
-              // Ensure preview wrapper is visible
-              if (previewWrapper) {
-                previewWrapper.style.display = "block";
-              }
-              
-              // Hide PDF viewer first
-              pdfViewer.style.display = "none";
-              
-              // Set image source and show container
-              imageViewer.src = currentObjectUrl;
-              imageContainer.style.display = "flex";
-              
-              // Wait for image to load
-              imageViewer.onload = () => {
-                console.log("✅ Image loaded successfully in viewer");
-                setupAnnotationCanvas(imageViewer);
-              };
-              
-              imageViewer.onerror = (err) => {
-                console.error("❌ Error loading image in viewer:", err);
-                poaStatus.className = "poa-status not-poa";
-                poaStatus.textContent = "Error displaying converted image. Please try again.";
-              };
-            } else {
-              console.error("❌ Image container or viewer not found");
-            }
+            // Keep the PDF in the viewer - don't switch to image viewer
+            // The converted image is stored in convertedImageFile and will be used for processing
+            // PDF viewer stays visible for user to view the document
+            console.log("📄 Keeping PDF in viewer for display, converted image will be used for processing");
 
             // Hide convert button, show start process button
             convertToImageBtn.classList.remove("show");
