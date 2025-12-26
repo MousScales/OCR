@@ -1,9 +1,16 @@
 -- ============================================
 -- FIX STORAGE POLICIES FOR DOCUMENTS BUCKET
 -- ============================================
+-- NOTE: This SQL requires owner/service role permissions
+-- If you get "must be owner" error, use the UI method instead:
+-- See STORAGE_SETUP_INSTRUCTIONS.md for UI setup steps
+-- ============================================
 -- Run this AFTER creating the "documents" bucket
 -- Go to: Supabase Dashboard -> SQL Editor -> New Query
 -- ============================================
+
+-- IMPORTANT: You may need to use the Service Role key for this
+-- Or use the UI method in STORAGE_SETUP_INSTRUCTIONS.md
 
 -- Drop all existing storage policies for documents bucket
 DROP POLICY IF EXISTS "Allow public read access" ON storage.objects;
@@ -19,7 +26,21 @@ DROP POLICY IF EXISTS "Public can update" ON storage.objects;
 DROP POLICY IF EXISTS "Public can delete" ON storage.objects;
 
 -- Enable RLS on storage.objects (if not already enabled)
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- Note: This may require owner permissions
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_tables 
+    WHERE schemaname = 'storage' 
+    AND tablename = 'objects'
+    AND rowsecurity = true
+  ) THEN
+    ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+  END IF;
+EXCEPTION
+  WHEN insufficient_privilege THEN
+    RAISE NOTICE 'Cannot enable RLS - use UI method instead';
+END $$;
 
 -- Policy 1: Allow public read access (anyone can view files)
 CREATE POLICY "Public Access" ON storage.objects
