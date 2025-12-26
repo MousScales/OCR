@@ -74,27 +74,32 @@ DROP POLICY IF EXISTS "Allow authenticated deletes" ON storage.objects;
 DROP POLICY IF EXISTS "Allow anon uploads" ON storage.objects;
 DROP POLICY IF EXISTS "Allow anon updates" ON storage.objects;
 DROP POLICY IF EXISTS "Allow anon deletes" ON storage.objects;
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+DROP POLICY IF EXISTS "Public can upload" ON storage.objects;
+
+-- Enable RLS on storage.objects (if not already enabled)
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
 -- Policy 1: Allow public read access (anyone can view files)
-CREATE POLICY "Allow public read access" ON storage.objects
+CREATE POLICY "Public Access" ON storage.objects
   FOR SELECT
-  USING (bucket_id = 'documents'::text);
+  USING (bucket_id = 'documents');
 
 -- Policy 2: Allow anonymous uploads (insert) - works with anon key
-CREATE POLICY "Allow anon uploads" ON storage.objects
+CREATE POLICY "Public can upload" ON storage.objects
   FOR INSERT
-  WITH CHECK (bucket_id = 'documents'::text);
+  WITH CHECK (bucket_id = 'documents');
 
 -- Policy 3: Allow anonymous updates
-CREATE POLICY "Allow anon updates" ON storage.objects
+CREATE POLICY "Public can update" ON storage.objects
   FOR UPDATE
-  USING (bucket_id = 'documents'::text)
-  WITH CHECK (bucket_id = 'documents'::text);
+  USING (bucket_id = 'documents')
+  WITH CHECK (bucket_id = 'documents');
 
 -- Policy 4: Allow anonymous deletes
-CREATE POLICY "Allow anon deletes" ON storage.objects
+CREATE POLICY "Public can delete" ON storage.objects
   FOR DELETE
-  USING (bucket_id = 'documents'::text);
+  USING (bucket_id = 'documents');
 
 -- ============================================
 -- VERIFICATION QUERIES (Optional - run to check)
