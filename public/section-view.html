@@ -108,7 +108,27 @@
 
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="section-view.js"></script>
+    <script>
+      // Wait for Supabase to load before running section-view.js
+      function initSectionView() {
+        if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
+          // Supabase is loaded, now load the main script
+          const script = document.createElement('script');
+          script.src = 'section-view.js';
+          document.body.appendChild(script);
+        } else {
+          // Wait a bit and try again
+          setTimeout(initSectionView, 100);
+        }
+      }
+      
+      // Start checking when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSectionView);
+      } else {
+        initSectionView();
+      }
+    </script>
   </body>
 </html>
 

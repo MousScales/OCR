@@ -38,23 +38,36 @@ if (sectionTitle) {
   }
 }
 
-// Initialize when DOM is ready
+// Initialize when DOM is ready and Supabase is loaded
 function initializePage() {
-  // Try to initialize Supabase
+  // Ensure Supabase is initialized
   if (!supabase) {
-    initSupabase();
+    const initialized = initSupabase();
+    if (!initialized) {
+      // If Supabase still not available, wait a bit and try again
+      setTimeout(() => {
+        if (!supabase) {
+          initSupabase();
+        }
+        loadDocuments();
+      }, 200);
+      return;
+    }
   }
   
   // Load documents
   loadDocuments();
 }
 
-// Try to initialize immediately if DOM is ready
+// Wait for both DOM and Supabase to be ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializePage);
+  document.addEventListener('DOMContentLoaded', function() {
+    // Wait a bit for Supabase to be available
+    setTimeout(initializePage, 100);
+  });
 } else {
-  // DOM already loaded
-  initializePage();
+  // DOM already loaded, wait for Supabase
+  setTimeout(initializePage, 100);
 }
 
 // Current document state
