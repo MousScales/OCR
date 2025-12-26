@@ -1879,6 +1879,10 @@
             return;
           }
 
+          // Hide analyze button when analyzing starts
+          analyzeBtn.classList.remove("show");
+          analyzeBtn.disabled = true;
+
           // Clear all text and show analyzing with animated dots
           analysisMeta.textContent = "";
           analysisBody.className = "analysis-body analysis-analyzing";
