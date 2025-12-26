@@ -34,9 +34,9 @@ CREATE INDEX IF NOT EXISTS idx_documents_file_path ON documents(file_path);
 -- Enable Row Level Security (RLS)
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
--- Create policy to allow all operations (you can restrict this later)
--- For now, allowing all operations with the anon key
-CREATE POLICY "Allow all operations for authenticated users" ON documents
+-- Create policy to allow all operations (for anonymous/anonymous key access)
+-- This allows the app to work with the anon key without requiring authentication
+CREATE POLICY "Allow all operations for anon users" ON documents
   FOR ALL
   USING (true)
   WITH CHECK (true);
