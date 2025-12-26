@@ -4,9 +4,40 @@ window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 
 // Create Supabase client (use var to allow redeclaration if needed)
 var supabase = null;
-if (window.supabase) {
-  supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-  console.log('Supabase client initialized');
+
+// Initialize Supabase client
+function initSupabase() {
+  if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
+    try {
+      supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+      console.log('✅ Supabase client initialized in section-view');
+      return true;
+    } catch (err) {
+      console.error('❌ Error initializing Supabase client:', err);
+      return false;
+    }
+  } else {
+    console.warn('⚠️ Supabase library not loaded yet');
+    return false;
+  }
+}
+
+// Try to initialize immediately
+initSupabase();
+
+// Also try on DOMContentLoaded in case script loads after
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!supabase) {
+      initSupabase();
+    }
+    loadDocuments();
+  });
+} else {
+  // DOM already loaded, try to initialize and load
+  if (!supabase) {
+    initSupabase();
+  }
 }
 
 // Get section from URL
@@ -28,12 +59,23 @@ let currentDocument = null;
 // Load documents
 async function loadDocuments() {
   const documentsList = document.getElementById('documents-list');
+  if (!documentsList) {
+    console.error('❌ documents-list element not found');
+    return;
+  }
+  
   documentsList.innerHTML = '<div class="empty-state">Loading documents...</div>';
 
   let documents = [];
   
-  if (supabase) {
+  // Ensure Supabase is initialized
+  if (!supabase) {
+    initSupabase();
+  }
+  
+  if (supabase && typeof supabase.from === 'function') {
     try {
+      console.log('📥 Loading documents from Supabase for section:', section);
       const { data, error } = await supabase
         .from('documents')
         .select('id, name, type, size, created_at, analysis_data, file_path')
@@ -41,9 +83,16 @@ async function loadDocuments() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading documents:', error);
+        console.error('❌ Error loading documents from Supabase:', error);
+        console.error('   Error code:', error.code);
+        console.error('   Error message:', error.message);
+        console.error('   Error details:', error.details);
+        console.error('   Error hint:', error.hint);
+        // Fallback to localStorage
         documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
+        console.log('📦 Loaded', documents.length, 'documents from localStorage (fallback)');
       } else {
+        console.log('✅ Loaded', data?.length || 0, 'documents from Supabase');
         documents = (data || []).map(doc => ({
           id: doc.id,
           name: doc.name,
@@ -53,14 +102,19 @@ async function loadDocuments() {
           hasAnalysis: !!doc.analysis_data,
           file_path: doc.file_path || null
         }));
+        // Sync to localStorage as backup
         localStorage.setItem(`${section}_documents`, JSON.stringify(documents));
+        console.log('💾 Synced', documents.length, 'documents to localStorage');
       }
     } catch (err) {
-      console.error('Supabase error:', err);
+      console.error('❌ Supabase exception:', err);
       documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
+      console.log('📦 Loaded', documents.length, 'documents from localStorage (exception fallback)');
     }
   } else {
+    console.warn('⚠️ Supabase not available, loading from localStorage');
     documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
+    console.log('📦 Loaded', documents.length, 'documents from localStorage');
   }
 
   if (documents.length === 0) {
