@@ -109,24 +109,40 @@
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-      // Wait for Supabase to load before running section-view.js
-      function initSectionView() {
+      // Supabase Configuration
+      window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
+      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
+      
+      // Wait for Supabase library to fully load
+      function waitForSupabase(callback) {
         if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
-          // Supabase is loaded, now load the main script
-          const script = document.createElement('script');
-          script.src = 'section-view.js';
-          document.body.appendChild(script);
+          // Create Supabase client
+          window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+          console.log('✅ Supabase client initialized in HTML');
+          callback();
         } else {
-          // Wait a bit and try again
-          setTimeout(initSectionView, 100);
+          // Wait and try again
+          setTimeout(() => waitForSupabase(callback), 50);
         }
       }
       
-      // Start checking when DOM is ready
+      // Initialize when DOM is ready
+      function init() {
+        waitForSupabase(() => {
+          // Now load the main script
+          const script = document.createElement('script');
+          script.src = 'section-view.js';
+          script.onload = () => {
+            console.log('✅ section-view.js loaded');
+          };
+          document.body.appendChild(script);
+        });
+      }
+      
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSectionView);
+        document.addEventListener('DOMContentLoaded', init);
       } else {
-        initSectionView();
+        init();
       }
     </script>
   </body>

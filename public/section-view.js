@@ -1,25 +1,19 @@
-// Supabase Configuration
-window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
-window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
+// Use the Supabase client that was initialized in HTML
+var supabase = window.supabaseClient || null;
 
-// Create Supabase client (use var to allow redeclaration if needed)
-var supabase = null;
-
-// Initialize Supabase client
-function initSupabase() {
-  if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
-    try {
-      supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-      console.log('✅ Supabase client initialized in section-view');
-      return true;
-    } catch (err) {
-      console.error('❌ Error initializing Supabase client:', err);
-      return false;
-    }
-  } else {
-    console.warn('⚠️ Supabase library not loaded yet');
-    return false;
+// If client wasn't initialized in HTML, try to initialize it now
+if (!supabase && typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
+  try {
+    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    window.supabaseClient = supabase;
+    console.log('✅ Supabase client initialized in section-view.js');
+  } catch (err) {
+    console.error('❌ Error initializing Supabase client:', err);
   }
+}
+
+if (!supabase) {
+  console.error('❌ Supabase client not available - documents will load from localStorage only');
 }
 
 // Get section from URL (needs to be available early)
@@ -38,36 +32,23 @@ if (sectionTitle) {
   }
 }
 
-// Initialize when DOM is ready and Supabase is loaded
+// Initialize page - Supabase should already be loaded from HTML
 function initializePage() {
-  // Ensure Supabase is initialized
-  if (!supabase) {
-    const initialized = initSupabase();
-    if (!initialized) {
-      // If Supabase still not available, wait a bit and try again
-      setTimeout(() => {
-        if (!supabase) {
-          initSupabase();
-        }
-        loadDocuments();
-      }, 200);
-      return;
-    }
+  // Ensure we have Supabase client
+  if (!supabase && window.supabaseClient) {
+    supabase = window.supabaseClient;
   }
   
   // Load documents
   loadDocuments();
 }
 
-// Wait for both DOM and Supabase to be ready
+// Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function() {
-    // Wait a bit for Supabase to be available
-    setTimeout(initializePage, 100);
-  });
+  document.addEventListener('DOMContentLoaded', initializePage);
 } else {
-  // DOM already loaded, wait for Supabase
-  setTimeout(initializePage, 100);
+  // DOM already loaded
+  initializePage();
 }
 
 // Current document state
@@ -85,15 +66,13 @@ async function loadDocuments() {
 
   let documents = [];
   
-  // Ensure Supabase is initialized
-  if (!supabase) {
-    initSupabase();
-  }
+  // Use the Supabase client from window (initialized in HTML)
+  const supabaseClient = window.supabaseClient || supabase;
   
-  if (supabase && typeof supabase.from === 'function') {
+  if (supabaseClient && typeof supabaseClient.from === 'function') {
     try {
       console.log('📥 Loading documents from Supabase for section:', section);
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('documents')
         .select('id, name, type, size, created_at, analysis_data, file_path')
         .eq('section', section)
@@ -238,7 +217,8 @@ async function loadDocument(docId, docName, docType) {
         if (data.file_path) {
           // Use Supabase Storage public URL
           console.log('📦 Loading file from Storage:', data.file_path);
-          const { data: urlData } = supabase.storage
+          const supabaseClient = window.supabaseClient || supabase;
+          const { data: urlData } = supabaseClient.storage
             .from('documents')
             .getPublicUrl(data.file_path);
           
@@ -572,12 +552,14 @@ async function deleteDocument(docId, filePath) {
     return;
   }
 
-  if (supabase) {
+  const supabaseClient = window.supabaseClient || supabase;
+  
+  if (supabaseClient) {
     console.log('✅ Supabase client available, proceeding with deletion');
     try {
       // Delete from Supabase Storage
       if (filePath) {
-        const { error: storageError } = await supabase.storage
+        const { error: storageError } = await supabaseClient.storage
           .from('documents')
           .remove([filePath]);
 
@@ -590,7 +572,7 @@ async function deleteDocument(docId, filePath) {
       }
 
       // Delete from Supabase database
-      const { error: dbError } = await supabase
+      const { error: dbError } = await supabaseClient
         .from('documents')
         .delete()
         .eq('id', docId);
@@ -736,9 +718,11 @@ async function deleteAllDocuments() {
         .map(doc => doc.file_path)
         .filter(path => path); // Remove null/undefined paths
 
+      const supabaseClient = window.supabaseClient || supabase;
+      
       if (filePaths.length > 0) {
         console.log('Deleting files from Storage:', filePaths);
-        const { error: storageError } = await supabase.storage
+        const { error: storageError } = await supabaseClient.storage
           .from('documents')
           .remove(filePaths);
 
@@ -751,7 +735,7 @@ async function deleteAllDocuments() {
       }
 
       // Delete all documents from database
-      const { error: dbError } = await supabase
+      const { error: dbError } = await supabaseClient
         .from('documents')
         .delete()
         .eq('section', currentSection);
