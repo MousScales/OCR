@@ -42,11 +42,16 @@ async function extractTextFromFile(file) {
     if (pdfParseFailed || !pdfText || pdfText.trim().length < 10) {
       try {
         const { pdfToImage, extractTextWithVision } = require('./vision-utils');
-        console.log("📸 Converting PDF to image for Vision API...");
+        console.log("📸 Automatically converting PDF to image for Vision API...");
         const imageBuffer = await pdfToImage(file.buffer);
         console.log("✅ PDF converted to image, using Vision API...");
         visionText = await extractTextWithVision(imageBuffer);
         console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
+        
+        // If we got text from Vision API, use it
+        if (visionText && visionText.trim().length > 0) {
+          text = visionText;
+        }
       } catch (visionError) {
         const visionErrorMsg = visionError.message || "PDF to image conversion failed";
         console.error("❌ PDF to image conversion FAILED:", visionErrorMsg);
@@ -56,16 +61,24 @@ async function extractTextFromFile(file) {
           console.log("✅ Using text from pdf-parse (even though it's short)");
           text = pdfText;
         } else {
-          // Both methods failed
-          let errorMsg;
-          if (visionErrorMsg.includes('PDF.js') || visionErrorMsg.includes('pdfjs-dist')) {
-            errorMsg = "This PDF appears to be a scanned document (image-based) with no extractable text. PDF to image conversion is not available in this serverless environment. Please convert the PDF to an image (PNG/JPG) and upload that instead for better text extraction.";
-          } else if (visionErrorMsg.includes('Canvas') || visionErrorMsg.includes('serverless') || visionErrorMsg.includes('native')) {
-            errorMsg = "PDF to image conversion is not available in this serverless environment (requires native dependencies). This PDF appears to be a scanned document with no extractable text. Please convert the PDF to an image (PNG/JPG) and upload that instead.";
-          } else {
-            errorMsg = `PDF text extraction failed: ${pdfParseError || 'unknown error'}. PDF to image conversion also failed: ${visionErrorMsg}. The PDF may be corrupted, password-protected, or a scanned document. Try converting the PDF to an image and uploading that instead.`;
+          // Both methods failed - try cloud conversion as automatic fallback
+          console.log("🔄 Automatically trying cloud-based PDF conversion...");
+          try {
+            const { pdfToImageCloud, extractTextWithVision } = require('./vision-utils');
+            const imageBuffer = await pdfToImageCloud(file.buffer);
+            console.log("✅ Cloud PDF conversion successful, using Vision API...");
+            visionText = await extractTextWithVision(imageBuffer);
+            if (visionText && visionText.trim().length > 0) {
+              console.log("✅ Vision API extracted text from cloud-converted PDF, length:", visionText.length);
+              text = visionText;
+            } else {
+              throw new Error("No text extracted after cloud conversion");
+            }
+          } catch (cloudError) {
+            console.error("❌ Cloud conversion also failed:", cloudError.message);
+            // Final fallback: return helpful but user-friendly error
+            throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results.");
           }
-          throw new Error(errorMsg);
         }
       }
     }

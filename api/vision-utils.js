@@ -5,6 +5,59 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Convert PDF to image using cloud service (fallback when local conversion fails)
+async function pdfToImageCloud(pdfBuffer) {
+  try {
+    console.log('🌐 Attempting cloud-based PDF to image conversion...');
+    
+    // Try using pdf.co API for PDF to image conversion
+    const base64Pdf = pdfBuffer.toString('base64');
+    const apiKey = process.env.PDF_CO_API_KEY || process.env.PDF_API_KEY || '';
+    
+    if (!apiKey) {
+      throw new Error('PDF conversion API key not configured');
+    }
+    
+    // Use pdf.co API
+    try {
+      const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/png', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        },
+        body: JSON.stringify({
+          file: `data:application/pdf;base64,${base64Pdf}`,
+          pages: '1',
+          async: false
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.url && !result.error) {
+          const imageResponse = await fetch(result.url);
+          const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+          const optimized = await sharp(imageBuffer)
+            .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+            .png()
+            .toBuffer();
+          console.log('✅ Cloud PDF conversion successful (pdf.co)');
+          return optimized;
+        }
+      }
+    } catch (pdfCoError) {
+      console.log('pdf.co conversion failed, trying alternative...');
+    }
+    
+    // If pdf.co fails, throw error to trigger next fallback
+    throw new Error('Cloud PDF conversion services unavailable');
+  } catch (error) {
+    console.error('Cloud PDF conversion error:', error.message);
+    throw error;
+  }
+}
+
 // Convert PDF first page to image buffer
 async function pdfToImage(pdfBuffer) {
   try {
@@ -13,7 +66,9 @@ async function pdfToImage(pdfBuffer) {
     try {
       pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
     } catch (pdfjsError) {
-      throw new Error('PDF.js library not available. PDF to image conversion requires pdfjs-dist package.');
+      console.log('⚠️ PDF.js not available, trying cloud conversion...');
+      // Fallback to cloud conversion
+      return await pdfToImageCloud(pdfBuffer);
     }
     
     // Check if canvas is available (may not work on serverless)
@@ -24,8 +79,9 @@ async function pdfToImage(pdfBuffer) {
       const testCanvas = createCanvas(10, 10);
       canvas = testCanvas.constructor;
     } catch (canvasError) {
-      console.warn('Canvas library not available or not working:', canvasError.message);
-      throw new Error('Canvas library not available in serverless environment. PDF to image conversion requires native dependencies that may not be available on Vercel.');
+      console.warn('Canvas library not available, trying cloud conversion...');
+      // Fallback to cloud conversion
+      return await pdfToImageCloud(pdfBuffer);
     }
     
     const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
@@ -55,12 +111,16 @@ async function pdfToImage(pdfBuffer) {
     
     return optimized;
   } catch (error) {
-    console.error('Error converting PDF to image:', error);
-    // Provide a more helpful error message
-    if (error.message.includes('Canvas') || error.message.includes('canvas')) {
-      throw new Error('PDF to image conversion not available: Canvas library requires native dependencies that are not available in this serverless environment. Falling back to PDF text extraction.');
+    console.error('Local PDF conversion error:', error);
+    // Try cloud conversion as fallback
+    try {
+      console.log('🔄 Attempting cloud-based fallback conversion...');
+      return await pdfToImageCloud(pdfBuffer);
+    } catch (cloudError) {
+      console.error('Cloud conversion also failed:', cloudError);
+      // Last resort: Try sending PDF directly to Vision API
+      throw new Error('PDF to image conversion failed. Both local and cloud conversion methods failed. Please convert the PDF to an image (PNG/JPG) and upload that instead.');
     }
-    throw error;
   }
 }
 
@@ -159,6 +219,7 @@ async function extractTextWithVision(imageBuffer) {
 
 module.exports = {
   pdfToImage,
+  pdfToImageCloud,
   analyzeWithVision,
   extractTextWithVision
 };
