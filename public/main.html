@@ -362,6 +362,9 @@
         min-height: 200px;
         display: flex;
         flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
       }
 
       .section-card:hover {
@@ -374,26 +377,49 @@
         box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
       }
 
-      .section-header {
+      .section-folder-container {
+        position: relative;
+        margin-bottom: 12px;
+        display: inline-block;
+      }
+
+      .section-folder-icon {
+        font-size: 64px;
+        line-height: 1;
+        display: block;
+      }
+
+      .section-count-badge {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #dc2626;
+        color: white;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+        border: 3px solid white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .section-header {
+        display: none; /* Hide old header */
       }
 
       .section-title {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
         color: #111827;
+        margin-top: 8px;
       }
 
       .section-count {
-        background: #1d4ed8;
-        color: #ffffff;
-        padding: 4px 12px;
-        border-radius: 999px;
-        font-size: 13px;
-        font-weight: 500;
+        display: none; /* Hide old count */
       }
 
       .documents-list {
