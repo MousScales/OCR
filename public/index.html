@@ -88,10 +88,23 @@
 
       .center-header {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
         align-items: center;
         padding: 8px 16px;
         border-bottom: 1px solid #e5e7eb;
+      }
+
+      .center-header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+      }
+
+      .center-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
       .center-body {
@@ -933,18 +946,22 @@
         <div class="drag-handle" id="drag-left"></div>
         <div class="column column-center" id="column-center">
           <div class="center-header">
-            <button id="close-pdf-btn" class="close-pdf-btn" type="button">✕</button>
-            <button id="convert-to-image-btn" type="button">
-              <span>Convert to Image</span>
-            </button>
-            <button id="start-process-btn" type="button">
-              <span>Start Process</span>
-            </button>
-            <button id="analyze-btn" type="button">
-          <span>Analyze</span>
-            </button>
-            <div id="poa-status" class="poa-status"></div>
-            <div id="state-error" class="state-error"></div>
+            <div class="center-header-left">
+              <button id="close-pdf-btn" class="close-pdf-btn" type="button">✕</button>
+              <div id="poa-status" class="poa-status"></div>
+              <div id="state-error" class="state-error"></div>
+            </div>
+            <div class="center-header-right">
+              <button id="convert-to-image-btn" type="button">
+                <span>Convert to Image</span>
+              </button>
+              <button id="start-process-btn" type="button">
+                <span>Start Process</span>
+              </button>
+              <button id="analyze-btn" type="button">
+                <span>Analyze</span>
+              </button>
+            </div>
           </div>
           <div class="center-body">
       <div class="controls">
@@ -1308,10 +1325,12 @@
             return;
           }
 
+          // Hide convert button
+          convertToImageBtn.classList.remove("show");
           convertToImageBtn.disabled = true;
-          convertToImageBtn.querySelector("span").textContent = "Converting...";
+          // Update text
           poaStatus.className = "poa-status checking";
-          poaStatus.textContent = "Converting PDF to image...";
+          poaStatus.textContent = "Converting...";
 
           try {
             console.log("📸 Starting client-side PDF to image conversion...");
@@ -1372,16 +1391,13 @@
             // PDF viewer stays visible for user to view the document
             console.log("📄 Keeping PDF in viewer for display, converted image will be used for processing");
 
-            // Hide convert button, show start process button
-            convertToImageBtn.classList.remove("show");
+            // Show start process button
             startProcessBtn.classList.add("show");
             startProcessBtn.disabled = false;
             poaStatus.className = "poa-status";
-            poaStatus.textContent = "PDF converted to image. Click 'Start Process' to continue.";
+            poaStatus.textContent = "Click the button to start process";
             
             console.log("✅ PDF converted to image successfully");
-            convertToImageBtn.disabled = false;
-            convertToImageBtn.querySelector("span").textContent = "Convert to Image";
 
           } catch (error) {
             const errorMsg = error?.message || String(error || 'Unknown error');
@@ -1409,7 +1425,9 @@
           // Start the document check process
           await checkIfPOA(fileToProcess);
           
+          // Hide start process button, show analyze button on the right
           startProcessBtn.classList.remove("show");
+          // Analyze button will be shown by checkIfPOA if document is valid
         });
 
         // Function to check if file is a POA
@@ -1721,12 +1739,12 @@
           startProcessBtn.classList.remove("show");
           startProcessBtn.disabled = true;
 
-          // If it's a PDF, show "Convert to Image" button
+          // If it's a PDF, show "Convert to Image" button and text
           if (file.type === "application/pdf") {
             convertToImageBtn.classList.add("show");
             convertToImageBtn.disabled = false;
             poaStatus.className = "poa-status";
-            poaStatus.textContent = "PDF uploaded. Click 'Convert to Image' to continue.";
+            poaStatus.textContent = "Please convert to image";
           } else if (file.type.startsWith("image/")) {
             // If it's already an image, auto-start processing
             convertToImageBtn.classList.remove("show");
