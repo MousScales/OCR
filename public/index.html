@@ -1055,6 +1055,7 @@
         let startX = 0;
         let startLeftWidth = 0;
         let startRightWidth = 0;
+        let currentDocumentId = null; // Track current document ID in Supabase
 
         // Get section from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -1085,139 +1086,83 @@
               localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
             }
 
-            // Save to Supabase Storage if available (non-blocking - don't fail if it errors)
+            // Save to Supabase - properly await and track document ID
             if (window.supabaseClient) {
               const supabase = window.supabaseClient;
-              // Run Supabase upload in background - don't block main functionality
-              (async () => {
-                try {
-                  console.log('📤 Uploading file to Supabase Storage...');
-                  
-                  // Create unique filename with timestamp
-                  const timestamp = Date.now();
-                  const fileExt = file.name.split('.').pop();
+              try {
+                console.log('📤 Saving document to Supabase...');
+                
+                // Create unique filename with timestamp
+                const timestamp = Date.now();
                 const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                 const filePath = `${currentSection}/${fileName}`;
                 
-                // Upload file to Supabase Storage
-                const { data: uploadData, error: uploadError } = await supabase.storage
-                  .from('documents')
-                  .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                  });
-                
-                if (uploadError) {
-                  // Check if it's a bucket error (non-critical)
-                  if (uploadError.message && uploadError.message.includes('Bucket not found')) {
-                    console.warn('⚠️ Supabase Storage bucket "documents" not found. This is non-critical - document will still work.');
-                    console.warn('💡 To fix: Create a "documents" bucket in Supabase Dashboard → Storage → New Bucket');
-                    console.warn('   The document is still saved locally and will work normally.');
-                  } else {
-                    // Safely log upload error
-                  try {
-                    const uploadErrorMsg = uploadError?.message || String(uploadError || 'Unknown upload error');
-                    console.error('❌ Storage upload error:', uploadErrorMsg);
-                  } catch (e) {
-                    console.error('❌ Storage upload error occurred');
-                  }
-                  }
+                // Try to upload file to Supabase Storage first
+                let uploadSuccess = false;
+                try {
+                  const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(filePath, file, {
+                      cacheControl: '3600',
+                      upsert: false
+                    });
                   
-                  // Fallback: save metadata only (if bucket exists but upload failed)
-                  try {
-                    const { data, error } = await supabase
-                      .from('documents')
-                      .insert([
-                        {
-                          name: file.name,
-                          type: file.type,
-                          size: file.size,
-                          section: currentSection,
-                          created_at: new Date().toISOString()
-                        }
-                      ])
-                      .select();
-                    
-                    if (error) {
-                      // Safely log error
-                      try {
-                        const errorMsg = error?.message || String(error || 'Unknown error');
-                        console.warn('⚠️ Could not save metadata to database (non-critical):', errorMsg);
-                      } catch (e) {
-                        console.warn('⚠️ Could not save metadata to database (non-critical)');
-                      }
+                  if (uploadError) {
+                    if (uploadError.message && uploadError.message.includes('Bucket not found')) {
+                      console.warn('⚠️ Supabase Storage bucket "documents" not found. Saving metadata only.');
+                      console.warn('💡 To fix: Create a "documents" bucket in Supabase Dashboard → Storage → New Bucket');
                     } else {
-                      console.log('✅ Document metadata saved (storage upload skipped):', data);
-                    }
-                  } catch (metaError) {
-                    // Safely log error
-                    try {
-                      const errorMsg = metaError?.message || String(metaError || 'Unknown error');
-                      console.warn('⚠️ Metadata save failed (non-critical):', errorMsg);
-                    } catch (e) {
-                      console.warn('⚠️ Metadata save failed (non-critical)');
-                    }
-                  }
-                } else {
-                  console.log('✅ File uploaded to Storage:', uploadData.path);
-                  
-                  // Get public URL
-                  const { data: urlData } = supabase.storage
-                    .from('documents')
-                    .getPublicUrl(filePath);
-                  
-                  const publicUrl = urlData.publicUrl;
-                  console.log('✅ Public URL:', publicUrl);
-                  
-                  // Save document record with file path
-                  const { data, error } = await supabase
-                    .from('documents')
-                    .insert([
-                      {
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        section: currentSection,
-                        file_path: filePath,
-                        created_at: new Date().toISOString()
-                      }
-                    ])
-                    .select();
-                  
-                  if (error) {
-                    // Safely log error
-                    try {
-                      const errorMsg = error?.message || String(error || 'Unknown error');
-                      console.error('Error saving document record:', errorMsg);
-                    } catch (e) {
-                      console.error('Error saving document record');
+                      console.warn('⚠️ Storage upload error:', uploadError.message || uploadError);
                     }
                   } else {
-                    console.log('✅ Document saved to Supabase:', data);
+                    uploadSuccess = true;
+                    console.log('✅ File uploaded to Storage:', uploadData.path);
+                  }
+                } catch (storageError) {
+                  console.warn('⚠️ Storage upload failed:', storageError.message || storageError);
+                }
+                
+                // Save document record to database (with or without file_path)
+                const documentData = {
+                  name: file.name,
+                  type: file.type,
+                  size: file.size,
+                  section: currentSection,
+                  created_at: new Date().toISOString()
+                };
+                
+                if (uploadSuccess) {
+                  documentData.file_path = filePath;
+                }
+                
+                const { data, error } = await supabase
+                  .from('documents')
+                  .insert([documentData])
+                  .select();
+                
+                if (error) {
+                  console.error('❌ Error saving document to database:', error.message || error);
+                  // Still save to localStorage as fallback
+                } else if (data && data.length > 0) {
+                  // Store the document ID for later use (e.g., saving analysis)
+                  currentDocumentId = data[0].id;
+                  console.log('✅ Document saved to Supabase with ID:', currentDocumentId);
+                  
+                  // Update localStorage with document ID
+                  const docIndex = documents.findIndex(doc => doc.name === file.name && doc.date === documentInfo.date);
+                  if (docIndex !== -1) {
+                    documents[docIndex].id = currentDocumentId;
+                    documents[docIndex].file_path = filePath;
+                    localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
                   }
                 }
-                } catch (supabaseError) {
-                  // Supabase errors are non-critical - don't block main functionality
-                  // Safely log supabase error
-                  try {
-                    const supabaseErrorMsg = supabaseError?.message || String(supabaseError || 'Unknown error');
-                    console.warn('⚠️ Supabase storage error (non-critical):', supabaseErrorMsg);
-                  } catch (e) {
-                    console.warn('⚠️ Supabase storage error (non-critical)');
-                  }
-                  // Continue - document is still saved to localStorage
-                }
-              })(); // Run async in background
+              } catch (supabaseError) {
+                console.error('❌ Supabase error:', supabaseError.message || supabaseError);
+                // Continue - document is still saved to localStorage
+              }
             }
           } catch (e) {
-            // Storage errors are non-critical
-            // Safely log error
-            try {
-              const errorMsg = e?.message || String(e || 'Unknown error');
-              console.warn('⚠️ Error saving document to storage (non-critical):', errorMsg);
-            } catch (logErr) {
-              console.warn('⚠️ Error saving document to storage (non-critical)');
-            }
+            console.error('❌ Error saving document:', e.message || e);
           }
         }
 
