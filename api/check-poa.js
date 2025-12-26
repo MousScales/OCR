@@ -101,11 +101,17 @@ module.exports = async (req, res) => {
       text = await extractTextFromFile(file);
       console.log('✅ Text extracted, length:', text.length);
     } catch (extractError) {
-      console.error('❌ Text extraction error:', extractError);
+      const errorMsg = extractError?.message || String(extractError || 'Unknown error');
+      console.error('❌ Text extraction error:', errorMsg);
+      console.error('❌ Full error details:', {
+        name: extractError?.name,
+        message: errorMsg,
+        stack: extractError?.stack?.substring(0, 500) // First 500 chars of stack
+      });
       return res.status(400).json({
         isPOA: false,
         poaType: null,
-        error: extractError.message || "Failed to extract text"
+        error: errorMsg || "Failed to extract text"
       });
     }
 
