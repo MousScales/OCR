@@ -12,6 +12,9 @@
     },
     "api/analyze-estate.js": {
       "maxDuration": 60
+    },
+    "api/convert-pdf-to-image.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

@@ -919,6 +919,12 @@
             <button id="close-pdf-btn" class="close-pdf-btn" type="button">✕</button>
             <div id="poa-status" class="poa-status"></div>
             <div id="state-error" class="state-error"></div>
+            <button id="convert-to-image-btn" type="button" style="display: none;">
+              <span>Convert to Image</span>
+            </button>
+            <button id="start-process-btn" type="button" style="display: none;">
+              <span>Start Process</span>
+            </button>
             <button id="analyze-btn" type="button">
           <span>Analyze</span>
             </button>
@@ -984,6 +990,12 @@
         const fileInput = document.getElementById("file-input");
         const selectBtn = document.getElementById("select-btn");
         const analyzeBtn = document.getElementById("analyze-btn");
+        const convertToImageBtn = document.getElementById("convert-to-image-btn");
+        const startProcessBtn = document.getElementById("start-process-btn");
+        
+        // Track current file and converted image
+        let currentFile = null;
+        let convertedImageFile = null;
         const fileNameLabel = document.getElementById("file-name");
         const pdfViewer = document.getElementById("pdf-viewer");
         const placeholder = document.getElementById("placeholder");
@@ -1271,6 +1283,96 @@
         selectBtn.addEventListener("click", () => {
           // No state selection required - user can upload document first
           fileInput.click();
+        });
+
+        // Convert PDF to Image button handler
+        convertToImageBtn.addEventListener("click", async () => {
+          if (!currentFile || currentFile.type !== "application/pdf") {
+            return;
+          }
+
+          convertToImageBtn.disabled = true;
+            convertToImageBtn.querySelector("span").textContent = "Converting...";
+          poaStatus.className = "poa-status checking";
+          poaStatus.textContent = "Converting PDF to image...";
+
+          try {
+            const formData = new FormData();
+            formData.append("file", currentFile);
+
+            const response = await fetch("/api/convert-pdf-to-image", {
+              method: "POST",
+              body: formData
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.error || "Conversion failed");
+            }
+
+            const result = await response.json();
+            
+            if (!result.success || !result.imageData) {
+              throw new Error("Conversion failed: No image data returned");
+            }
+
+            // Convert base64 data URL to File object
+            const base64Response = await fetch(result.imageData);
+            const blob = await base64Response.blob();
+            convertedImageFile = new File([blob], result.originalFileName || "converted.png", { type: "image/png" });
+
+            // Update the preview
+            if (currentObjectUrl) {
+              URL.revokeObjectURL(currentObjectUrl);
+            }
+            currentObjectUrl = URL.createObjectURL(convertedImageFile);
+
+            const imageContainer = document.getElementById("image-container");
+            const imageViewer = document.getElementById("image-viewer");
+            if (imageViewer && imageContainer) {
+              imageViewer.src = currentObjectUrl;
+              imageContainer.style.display = "flex";
+              imageViewer.onload = () => {
+                setupAnnotationCanvas(imageViewer);
+              };
+            }
+            pdfViewer.style.display = "none";
+
+            // Hide convert button, show start process button
+            convertToImageBtn.classList.remove("show");
+            startProcessBtn.classList.add("show");
+            startProcessBtn.disabled = false;
+            poaStatus.className = "poa-status";
+            poaStatus.textContent = "PDF converted to image. Click 'Start Process' to continue.";
+            
+            console.log("✅ PDF converted to image successfully");
+          } catch (error) {
+            const errorMsg = error?.message || String(error || 'Unknown error');
+            console.error("❌ PDF conversion error:", errorMsg);
+            poaStatus.className = "poa-status not-poa";
+            poaStatus.textContent = "Conversion failed: " + errorMsg;
+            convertToImageBtn.disabled = false;
+            convertToImageBtn.querySelector("span").textContent = "Convert to Image";
+          }
+        });
+
+        // Start Process button handler
+        startProcessBtn.addEventListener("click", async () => {
+          const fileToProcess = convertedImageFile || currentFile;
+          if (!fileToProcess) {
+            return;
+          }
+
+          startProcessBtn.disabled = true;
+          startProcessBtn.querySelector("span").textContent = "Processing...";
+          
+          // Save document to localStorage
+          saveDocumentToStorage(fileToProcess);
+          
+          // Start the document check process
+          await checkIfPOA(fileToProcess);
+          
+          startProcessBtn.classList.remove("show");
         });
 
         // Function to check if file is a POA
@@ -1574,11 +1676,33 @@
             selectBtn.style.display = "none";
           }
 
-          // Save document to localStorage
-          saveDocumentToStorage(file);
+          // Store current file
+          currentFile = file;
+          convertedImageFile = null;
 
-          // Check if file is a POA
-          await checkIfPOA(file);
+          // Hide all action buttons initially
+          analyzeBtn.classList.remove("show");
+          analyzeBtn.disabled = true;
+          convertToImageBtn.classList.remove("show");
+          convertToImageBtn.disabled = false;
+          startProcessBtn.classList.remove("show");
+          startProcessBtn.disabled = true;
+
+          // If it's a PDF, show "Convert to Image" button
+          if (file.type === "application/pdf") {
+            convertToImageBtn.classList.add("show");
+            convertToImageBtn.disabled = false;
+            poaStatus.className = "poa-status";
+            poaStatus.textContent = "PDF uploaded. Click 'Convert to Image' to continue.";
+          } else if (file.type.startsWith("image/")) {
+            // If it's already an image, auto-start processing
+            convertToImageBtn.classList.remove("show");
+            startProcessBtn.classList.remove("show");
+            // Save document to localStorage
+            saveDocumentToStorage(file);
+            // Auto-start processing for images
+            await checkIfPOA(file);
+          }
         });
 
         if (closePdfBtn) {
