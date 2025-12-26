@@ -22,35 +22,39 @@ function initSupabase() {
   }
 }
 
-// Try to initialize immediately
-initSupabase();
+// Get section from URL (needs to be available early)
+const urlParams = new URLSearchParams(window.location.search);
+const section = urlParams.get('section') || 'poa';
 
-// Also try on DOMContentLoaded in case script loads after
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function() {
-    if (!supabase) {
-      initSupabase();
-    }
-    loadDocuments();
-  });
-} else {
-  // DOM already loaded, try to initialize and load
-  if (!supabase) {
-    initSupabase();
+// Set proper section title
+const sectionTitle = document.getElementById('section-title');
+if (sectionTitle) {
+  if (section === 'section2') {
+    sectionTitle.textContent = 'Estate Documents';
+  } else if (section === 'poa') {
+    sectionTitle.textContent = 'POA';
+  } else {
+    sectionTitle.textContent = section.toUpperCase();
   }
 }
 
-// Get section from URL
-const urlParams = new URLSearchParams(window.location.search);
-const section = urlParams.get('section') || 'poa';
-const sectionTitle = document.getElementById('section-title');
-// Set proper section title
-if (section === 'section2') {
-  sectionTitle.textContent = 'Estate Documents';
-} else if (section === 'poa') {
-  sectionTitle.textContent = 'POA';
+// Initialize when DOM is ready
+function initializePage() {
+  // Try to initialize Supabase
+  if (!supabase) {
+    initSupabase();
+  }
+  
+  // Load documents
+  loadDocuments();
+}
+
+// Try to initialize immediately if DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePage);
 } else {
-  sectionTitle.textContent = section.toUpperCase();
+  // DOM already loaded
+  initializePage();
 }
 
 // Current document state
