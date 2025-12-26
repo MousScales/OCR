@@ -1384,14 +1384,39 @@
 
             const imageContainer = document.getElementById("image-container");
             const imageViewer = document.getElementById("image-viewer");
+            const previewWrapper = document.querySelector(".preview-wrapper");
+            
             if (imageViewer && imageContainer) {
+              console.log("🖼️ Setting up image viewer...");
+              console.log("   Image URL:", currentObjectUrl);
+              console.log("   Image file size:", convertedImageFile.size, "bytes");
+              
+              // Ensure preview wrapper is visible
+              if (previewWrapper) {
+                previewWrapper.style.display = "block";
+              }
+              
+              // Hide PDF viewer first
+              pdfViewer.style.display = "none";
+              
+              // Set image source and show container
               imageViewer.src = currentObjectUrl;
               imageContainer.style.display = "flex";
+              
+              // Wait for image to load
               imageViewer.onload = () => {
+                console.log("✅ Image loaded successfully in viewer");
                 setupAnnotationCanvas(imageViewer);
               };
+              
+              imageViewer.onerror = (err) => {
+                console.error("❌ Error loading image in viewer:", err);
+                poaStatus.className = "poa-status not-poa";
+                poaStatus.textContent = "Error displaying converted image. Please try again.";
+              };
+            } else {
+              console.error("❌ Image container or viewer not found");
             }
-            pdfViewer.style.display = "none";
 
             // Hide convert button, show start process button
             convertToImageBtn.classList.remove("show");
@@ -1861,7 +1886,8 @@
         });
 
         analyzeBtn.addEventListener("click", async () => {
-          const file = fileInput.files && fileInput.files[0];
+          // Use converted image if available, otherwise use current file
+          const file = convertedImageFile || (fileInput.files && fileInput.files[0]) || currentFile;
           // State is now optional - proceed with analysis if document is valid
           if (!isPOA) {
             if (stateError) {
