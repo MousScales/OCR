@@ -194,9 +194,11 @@ async function loadDocument(docId, docName, docType) {
   pdfViewer.style.display = 'none';
   imageViewer.style.display = 'none';
 
-  if (supabase && docId) {
+  const supabaseClient = window.supabaseClient || supabase;
+  
+  if (supabaseClient && docId) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('documents')
         .select('file_path, file_data, analysis_data')
         .eq('id', docId)
@@ -513,7 +515,8 @@ document.getElementById('run-analysis-btn').addEventListener('click', async func
 
     if (supabase && currentDocument.id) {
       try {
-        const { error } = await supabase
+        const supabaseClient = window.supabaseClient || supabase;
+        const { error } = await supabaseClient
           .from('documents')
           .update({ analysis_data: analysis })
           .eq('id', currentDocument.id);
@@ -691,7 +694,8 @@ async function deleteAllDocuments() {
       console.log('🗑️ Deleting all documents from Supabase...');
       
       // Get all documents for this section
-      const { data: documents, error: fetchError } = await supabase
+      const supabaseClient = window.supabaseClient || supabase;
+      const { data: documents, error: fetchError } = await supabaseClient
         .from('documents')
         .select('id, file_path')
         .eq('section', currentSection);
