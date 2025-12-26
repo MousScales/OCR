@@ -88,7 +88,18 @@ async function extractTextFromFile(file) {
             }
           } catch (cloudError) {
             const cloudErrorMsg = cloudError.message || "Unknown error";
-            console.error("❌ Cloud conversion also failed:", cloudErrorMsg);
+            console.error("═══════════════════════════════════════════════════");
+            console.error("❌ CLOUD CONVERSION FAILED");
+            console.error("═══════════════════════════════════════════════════");
+            console.error("❌ Error message:", cloudErrorMsg);
+            console.error("❌ Error name:", cloudError.name);
+            console.error("❌ API Key was set:", !!process.env.PDF_CO_API_KEY);
+            console.error("❌ API Key length:", process.env.PDF_CO_API_KEY?.length || 0);
+            console.error("❌ Full error:", JSON.stringify({
+              name: cloudError.name,
+              message: cloudErrorMsg,
+              stack: cloudError.stack?.substring(0, 1000)
+            }));
             
             // Check if it's an API key issue
             if (cloudErrorMsg.includes('API key') || cloudErrorMsg.includes('not configured')) {
@@ -139,9 +150,20 @@ async function extractTextFromFile(file) {
                   throw new Error("No text extracted from PDF");
                 }
               } catch (directVisionError) {
-                console.error("❌ Direct PDF to Vision API also failed:", directVisionError.message);
-                // Final fallback: return helpful but user-friendly error
-                throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results.");
+                const directErrorMsg = directVisionError.message || "Unknown error";
+                console.error("❌ Direct PDF to Vision API also failed:", directErrorMsg);
+                console.error("❌ All conversion methods exhausted. Final error details:", {
+                  pdfParseFailed: pdfParseFailed,
+                  pdfTextLength: pdfText?.length || 0,
+                  cloudConversionAttempted: true,
+                  directVisionAttempted: true,
+                  apiKeySet: !!process.env.PDF_CO_API_KEY
+                });
+                // Final fallback: return helpful but user-friendly error with diagnostic info
+                const diagnosticInfo = process.env.PDF_CO_API_KEY 
+                  ? " (API key is set, but conversion services failed)"
+                  : " (PDF_CO_API_KEY not set in Vercel - please configure it)";
+                throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results." + diagnosticInfo);
               }
             } else {
               // API key issue - don't try Vision API, just throw the clear error
