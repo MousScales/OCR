@@ -996,6 +996,7 @@
 
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
       // Supabase Configuration
       window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
@@ -1310,41 +1311,70 @@
           fileInput.click();
         });
 
-        // Convert PDF to Image button handler
+        // Convert PDF to Image button handler (client-side using pdf.js)
         convertToImageBtn.addEventListener("click", async () => {
           if (!currentFile || currentFile.type !== "application/pdf") {
             return;
           }
 
           convertToImageBtn.disabled = true;
-            convertToImageBtn.querySelector("span").textContent = "Converting...";
+          convertToImageBtn.querySelector("span").textContent = "Converting...";
           poaStatus.className = "poa-status checking";
           poaStatus.textContent = "Converting PDF to image...";
 
           try {
-            const formData = new FormData();
-            formData.append("file", currentFile);
+            console.log("📸 Starting client-side PDF to image conversion...");
+            
+            // Set up pdf.js worker
+            if (typeof pdfjsLib !== 'undefined') {
+              pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            } else {
+              throw new Error("PDF.js library not loaded");
+            }
 
-            const response = await fetch("/api/convert-pdf-to-image", {
-              method: "POST",
-              body: formData
+            // Read PDF file as array buffer
+            const arrayBuffer = await currentFile.arrayBuffer();
+            console.log("✅ PDF loaded, size:", arrayBuffer.byteLength, "bytes");
+
+            // Load PDF document
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
+            console.log("✅ PDF document loaded, pages:", pdf.numPages);
+
+            // Get first page
+            const page = await pdf.getPage(1);
+            console.log("✅ First page loaded");
+
+            // Set up canvas for rendering
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            // Render PDF page to canvas
+            console.log("🖼️ Rendering PDF page to canvas...");
+            await page.render({
+              canvasContext: context,
+              viewport: viewport
+            }).promise;
+
+            console.log("✅ PDF rendered to canvas");
+
+            // Convert canvas to blob (promise-based)
+            const blob = await new Promise((resolve, reject) => {
+              canvas.toBlob((blob) => {
+                if (!blob) {
+                  reject(new Error("Failed to convert canvas to blob"));
+                } else {
+                  resolve(blob);
+                }
+              }, "image/png", 0.95);
             });
 
-            if (!response.ok) {
-              const errorData = await response.json().catch(() => ({}));
-              throw new Error(errorData.error || "Conversion failed");
-            }
-
-            const result = await response.json();
-            
-            if (!result.success || !result.imageData) {
-              throw new Error("Conversion failed: No image data returned");
-            }
-
-            // Convert base64 data URL to File object
-            const base64Response = await fetch(result.imageData);
-            const blob = await base64Response.blob();
-            convertedImageFile = new File([blob], result.originalFileName || "converted.png", { type: "image/png" });
+            // Create File object from blob
+            convertedImageFile = new File([blob], currentFile.name.replace(/\.pdf$/i, '.png'), { type: "image/png" });
+            console.log("✅ Image file created, size:", convertedImageFile.size, "bytes");
 
             // Update the preview
             if (currentObjectUrl) {
@@ -1371,6 +1401,9 @@
             poaStatus.textContent = "PDF converted to image. Click 'Start Process' to continue.";
             
             console.log("✅ PDF converted to image successfully");
+            convertToImageBtn.disabled = false;
+            convertToImageBtn.querySelector("span").textContent = "Convert to Image";
+
           } catch (error) {
             const errorMsg = error?.message || String(error || 'Unknown error');
             console.error("❌ PDF conversion error:", errorMsg);
