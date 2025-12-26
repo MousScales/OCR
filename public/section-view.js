@@ -615,6 +615,116 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+// Delete all documents
+async function deleteAllDocuments() {
+  const currentSection = urlParams.get('section') || 'poa';
+  const sectionLabel = currentSection === 'section2' ? 'Estate Documents' : 'POA';
+  
+  if (!confirm(`Are you sure you want to delete ALL ${sectionLabel} documents? This action cannot be undone.`)) {
+    console.log('❌ User cancelled delete all');
+    return;
+  }
+
+  if (!confirm('This will permanently delete all documents. Are you absolutely sure?')) {
+    console.log('❌ User cancelled delete all (second confirmation)');
+    return;
+  }
+
+  const documentsList = document.getElementById('documents-list');
+  documentsList.innerHTML = '<div class="empty-state">Deleting all documents...</div>';
+
+  if (supabase) {
+    try {
+      console.log('🗑️ Deleting all documents from Supabase...');
+      
+      // Get all documents for this section
+      const { data: documents, error: fetchError } = await supabase
+        .from('documents')
+        .select('id, file_path')
+        .eq('section', currentSection);
+
+      if (fetchError) {
+        console.error('Error fetching documents:', fetchError);
+        alert('Error fetching documents: ' + fetchError.message);
+        loadDocuments();
+        return;
+      }
+
+      if (!documents || documents.length === 0) {
+        console.log('No documents to delete');
+        // Clear localStorage anyway
+        localStorage.removeItem(`${currentSection}_documents`);
+        loadDocuments();
+        return;
+      }
+
+      console.log(`Found ${documents.length} documents to delete`);
+
+      // Delete all files from Storage
+      const filePaths = documents
+        .map(doc => doc.file_path)
+        .filter(path => path); // Remove null/undefined paths
+
+      if (filePaths.length > 0) {
+        console.log('Deleting files from Storage:', filePaths);
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove(filePaths);
+
+        if (storageError) {
+          console.error('Error deleting files from Storage:', storageError);
+          // Continue with database deletion even if storage fails
+        } else {
+          console.log('✅ All files deleted from Storage');
+        }
+      }
+
+      // Delete all documents from database
+      const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('section', currentSection);
+
+      if (dbError) {
+        console.error('Error deleting documents from database:', dbError);
+        alert('Error deleting documents from database: ' + dbError.message);
+        loadDocuments();
+        return;
+      }
+
+      console.log(`✅ Deleted ${documents.length} documents from database`);
+
+      // Clear localStorage
+      localStorage.removeItem(`${currentSection}_documents`);
+
+      // Close viewer if open
+      closeViewer();
+
+      // Reload the document list
+      loadDocuments();
+      
+      alert(`Successfully deleted all ${documents.length} documents.`);
+    } catch (err) {
+      console.error('Error during delete all:', err);
+      alert('An unexpected error occurred: ' + err.message);
+      loadDocuments();
+    }
+  } else {
+    // Fallback to localStorage only
+    const localDocs = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+    localStorage.removeItem(`${currentSection}_documents`);
+    closeViewer();
+    loadDocuments();
+    alert(`Deleted ${localDocs.length} documents from local storage.`);
+  }
+}
+
+// Add event listener for delete all button
+const deleteAllBtn = document.getElementById('delete-all-btn');
+if (deleteAllBtn) {
+  deleteAllBtn.addEventListener('click', deleteAllDocuments);
+}
+
 // Initialize
 loadDocuments();
 
