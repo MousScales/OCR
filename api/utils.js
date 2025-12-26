@@ -27,6 +27,9 @@ async function extractTextFromFile(file) {
       if (!pdfText || pdfText.trim().length < 10) {
         console.warn("⚠️ PDF appears to be scanned (no extractable text). Attempting image conversion...");
         pdfParseFailed = true;
+      } else {
+        // pdf-parse succeeded with good text - use it as primary source
+        text = pdfText;
       }
     } catch (parseError) {
       pdfParseFailed = true;
@@ -67,13 +70,16 @@ async function extractTextFromFile(file) {
       }
     }
     
-    // Combine both sources if we have both (only if text wasn't set in catch block)
-    if (typeof text === 'undefined' || !text) {
-      text = visionText || pdfText || "";
-      if (visionText && pdfText) {
-        // Merge both for comprehensive extraction
-        text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
-      }
+    // Combine both sources if we have both
+    if (visionText && pdfText && pdfText.trim().length >= 10) {
+      // Merge both for comprehensive extraction
+      text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
+    } else if (visionText && !text) {
+      // Use vision text if we don't have good pdf text
+      text = visionText;
+    } else if (!text) {
+      // Fallback to pdfText if available
+      text = pdfText || "";
     }
     
     console.log("✅ PDF text extraction complete, total length:", text.length);
