@@ -55,6 +55,12 @@ async function extractTextFromFile(file) {
       } catch (visionError) {
         const visionErrorMsg = visionError.message || "PDF to image conversion failed";
         console.error("❌ PDF to image conversion FAILED:", visionErrorMsg);
+        console.error("❌ Error type:", visionError.name);
+        console.error("❌ Full error:", JSON.stringify({
+          name: visionError.name,
+          message: visionErrorMsg,
+          stack: visionError.stack?.substring(0, 500)
+        }));
         
         // If we have some text from pdf-parse, use it even if it's short
         if (pdfText && pdfText.trim().length > 0) {
@@ -62,11 +68,15 @@ async function extractTextFromFile(file) {
           text = pdfText;
         } else {
           // Both methods failed - try cloud conversion as automatic fallback
-          console.log("🔄 Automatically trying cloud-based PDF conversion...");
+          console.log("═══════════════════════════════════════════════════");
+          console.log("🔄 AUTOMATIC CLOUD CONVERSION STARTING...");
+          console.log("═══════════════════════════════════════════════════");
           console.log("📋 Checking for PDF_CO_API_KEY:", process.env.PDF_CO_API_KEY ? "✅ SET" : "❌ NOT SET");
+          console.log("📋 API Key length:", process.env.PDF_CO_API_KEY?.length || 0);
           try {
             const { pdfToImageCloud, extractTextWithVision } = require('./vision-utils');
             console.log("📦 Calling pdfToImageCloud function...");
+            console.log("📦 PDF buffer size:", file.buffer.length, "bytes");
             const imageBuffer = await pdfToImageCloud(file.buffer);
             console.log("✅ Cloud PDF conversion successful, using Vision API...");
             visionText = await extractTextWithVision(imageBuffer);

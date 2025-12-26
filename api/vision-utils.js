@@ -166,9 +166,8 @@ async function pdfToImage(pdfBuffer) {
     try {
       pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
     } catch (pdfjsError) {
-      console.log('⚠️ PDF.js not available, trying cloud conversion...');
-      // Fallback to cloud conversion
-      return await pdfToImageCloud(pdfBuffer);
+      console.log('⚠️ PDF.js not available');
+      throw new Error('PDF.js library not available in serverless environment');
     }
     
     // Check if canvas is available (may not work on serverless)
@@ -179,9 +178,8 @@ async function pdfToImage(pdfBuffer) {
       const testCanvas = createCanvas(10, 10);
       canvas = testCanvas.constructor;
     } catch (canvasError) {
-      console.warn('Canvas library not available, trying cloud conversion...');
-      // Fallback to cloud conversion
-      return await pdfToImageCloud(pdfBuffer);
+      console.warn('Canvas library not available');
+      throw new Error('Canvas library not available in serverless environment');
     }
     
     const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
@@ -211,16 +209,10 @@ async function pdfToImage(pdfBuffer) {
     
     return optimized;
   } catch (error) {
-    console.error('Local PDF conversion error:', error);
-    // Try cloud conversion as fallback
-    try {
-      console.log('🔄 Attempting cloud-based fallback conversion...');
-      return await pdfToImageCloud(pdfBuffer);
-    } catch (cloudError) {
-      console.error('Cloud conversion also failed:', cloudError);
-      // Last resort: Try sending PDF directly to Vision API
-      throw new Error('PDF to image conversion failed. Both local and cloud conversion methods failed. Please convert the PDF to an image (PNG/JPG) and upload that instead.');
-    }
+    console.error('Local PDF conversion error:', error.message || error);
+    // Don't try cloud conversion here - let the caller (utils.js) handle it
+    // This gives better error handling and logging control
+    throw error;
   }
 }
 
