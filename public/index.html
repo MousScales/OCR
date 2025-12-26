@@ -1942,32 +1942,60 @@
               analysisBody.classList.remove("analysis-empty", "analysis-analyzing");
 
               // Save analysis to Supabase if available
-              if (window.supabaseClient && file) {
+              if (window.supabaseClient && currentDocumentId) {
                 const supabase = window.supabaseClient;
                 try {
-                  // Find the document in Supabase by name and update with analysis
+                  console.log('💾 Saving analysis to Supabase for document ID:', currentDocumentId);
+                  const { error: updateError } = await supabase
+                    .from('documents')
+                    .update({ 
+                      analysis_data: a,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', currentDocumentId);
+
+                  if (updateError) {
+                    console.error('❌ Error saving analysis to Supabase:', updateError.message || updateError);
+                  } else {
+                    console.log('✅ Analysis saved to Supabase successfully');
+                  }
+                } catch (supabaseError) {
+                  console.error('❌ Error saving analysis:', supabaseError.message || supabaseError);
+                }
+              } else if (window.supabaseClient && file) {
+                // Fallback: try to find document by name if ID not available
+                const supabase = window.supabaseClient;
+                try {
+                  console.log('⚠️ Document ID not available, trying to find by name...');
                   const { data: docs, error: findError } = await supabase
                     .from('documents')
                     .select('id')
                     .eq('name', file.name)
+                    .eq('section', currentSection)
                     .order('created_at', { ascending: false })
                     .limit(1);
 
                   if (!findError && docs && docs.length > 0) {
                     const docId = docs[0].id;
+                    currentDocumentId = docId; // Store for future use
                     const { error: updateError } = await supabase
                       .from('documents')
-                      .update({ analysis_data: a })
+                      .update({ 
+                        analysis_data: a,
+                        updated_at: new Date().toISOString()
+                      })
                       .eq('id', docId);
 
                     if (updateError) {
-                      console.error('Error saving analysis to Supabase:', updateError);
+                      console.error('❌ Error saving analysis to Supabase:', updateError.message || updateError);
                     } else {
-                      console.log('Analysis saved to Supabase');
+                      console.log('✅ Analysis saved to Supabase (found by name)');
                     }
+                  } else {
+                    console.warn('⚠️ Could not find document in Supabase to save analysis');
                   }
                 } catch (supabaseError) {
-                  console.error('Error saving analysis:', supabaseError);
+                  console.error('❌ Error saving analysis:', supabaseError.message || supabaseError);
                 }
               }
 
