@@ -1418,8 +1418,14 @@
             return;
           }
 
+          // Hide start process button
+          startProcessBtn.classList.remove("show");
           startProcessBtn.disabled = true;
-          startProcessBtn.querySelector("span").textContent = "Processing...";
+          
+          // Update text on left to show processing
+          poaStatus.className = "poa-status checking";
+          const checkingText = currentSection === 'section2' ? 'Checking if this is an Estate Document' : 'Checking if this is a POA';
+          poaStatus.innerHTML = `${checkingText}<span class='bouncing-dots'><span>.</span><span>.</span><span>.</span></span>`;
           
           // Save document to localStorage
           saveDocumentToStorage(fileToProcess);
@@ -1427,8 +1433,6 @@
           // Start the document check process
           await checkIfPOA(fileToProcess);
           
-          // Hide start process button, show analyze button on the right
-          startProcessBtn.classList.remove("show");
           // Analyze button will be shown by checkIfPOA if document is valid
         });
 
