@@ -1,6 +1,5 @@
 const sharp = require('sharp');
 const OpenAI = require('openai');
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -9,6 +8,14 @@ const openai = new OpenAI({
 // Convert PDF first page to image buffer
 async function pdfToImage(pdfBuffer) {
   try {
+    // Lazy load pdfjs-dist only when needed for PDFs (not for images)
+    let pdfjsLib;
+    try {
+      pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+    } catch (pdfjsError) {
+      throw new Error('PDF.js library not available. PDF to image conversion requires pdfjs-dist package.');
+    }
+    
     // Check if canvas is available (may not work on serverless)
     let canvas;
     try {
