@@ -1404,6 +1404,8 @@
             console.error("❌ PDF conversion error:", errorMsg);
             poaStatus.className = "poa-status not-poa";
             poaStatus.textContent = "Conversion failed: " + errorMsg;
+            // Show convert button again on error
+            convertToImageBtn.classList.add("show");
             convertToImageBtn.disabled = false;
             convertToImageBtn.querySelector("span").textContent = "Convert to Image";
           }
