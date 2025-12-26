@@ -67,8 +67,8 @@ async function extractTextFromFile(file) {
       }
     }
     
-    // Combine both sources if we have both
-    if (!text) {
+    // Combine both sources if we have both (only if text wasn't set in catch block)
+    if (typeof text === 'undefined' || !text) {
       text = visionText || pdfText || "";
       if (visionText && pdfText) {
         // Merge both for comprehensive extraction
