@@ -1070,36 +1070,22 @@
         // Function to save document to Supabase and localStorage
         async function saveDocumentToStorage(file) {
           try {
-            // Save to localStorage (fallback)
-            const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
-            const documentInfo = {
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              date: new Date().toISOString()
-            };
+            console.log('💾 Starting document save process...', { name: file.name, type: file.type, size: file.size });
             
-            // Check if document already exists (by name and date)
-            const exists = documents.some(doc => doc.name === file.name && doc.date === documentInfo.date);
-            if (!exists) {
-              documents.push(documentInfo);
-              localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
-            }
-
-            // Save to Supabase - properly await and track document ID
+            // Save to Supabase FIRST (this is the source of truth)
             if (window.supabaseClient) {
               const supabase = window.supabaseClient;
               try {
-                console.log('📤 Saving document to Supabase...');
-                
                 // Create unique filename with timestamp
                 const timestamp = Date.now();
                 const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                 const filePath = `${currentSection}/${fileName}`;
                 
-                // Try to upload file to Supabase Storage first
+                // Try to upload file to Supabase Storage (optional - non-blocking)
                 let uploadSuccess = false;
+                let storageErrorMsg = null;
                 try {
+                  console.log('📤 Attempting to upload file to Storage...');
                   const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('documents')
                     .upload(filePath, file, {
@@ -1108,21 +1094,22 @@
                     });
                   
                   if (uploadError) {
-                    if (uploadError.message && uploadError.message.includes('Bucket not found')) {
-                      console.warn('⚠️ Supabase Storage bucket "documents" not found. Saving metadata only.');
-                      console.warn('💡 To fix: Create a "documents" bucket in Supabase Dashboard → Storage → New Bucket');
+                    storageErrorMsg = uploadError.message || String(uploadError);
+                    if (storageErrorMsg.includes('Bucket not found')) {
+                      console.warn('⚠️ Storage bucket "documents" not found. Will save metadata only.');
                     } else {
-                      console.warn('⚠️ Storage upload error:', uploadError.message || uploadError);
+                      console.warn('⚠️ Storage upload error:', storageErrorMsg);
                     }
                   } else {
                     uploadSuccess = true;
                     console.log('✅ File uploaded to Storage:', uploadData.path);
                   }
                 } catch (storageError) {
-                  console.warn('⚠️ Storage upload failed:', storageError.message || storageError);
+                  storageErrorMsg = storageError.message || String(storageError);
+                  console.warn('⚠️ Storage upload exception:', storageErrorMsg);
                 }
                 
-                // Save document record to database (with or without file_path)
+                // ALWAYS save document record to database (even if storage fails)
                 const documentData = {
                   name: file.name,
                   type: file.type,
@@ -1135,34 +1122,89 @@
                   documentData.file_path = filePath;
                 }
                 
+                console.log('💾 Saving document to database...', documentData);
                 const { data, error } = await supabase
                   .from('documents')
                   .insert([documentData])
                   .select();
                 
                 if (error) {
-                  console.error('❌ Error saving document to database:', error.message || error);
-                  // Still save to localStorage as fallback
-                } else if (data && data.length > 0) {
-                  // Store the document ID for later use (e.g., saving analysis)
-                  currentDocumentId = data[0].id;
-                  console.log('✅ Document saved to Supabase with ID:', currentDocumentId);
-                  
-                  // Update localStorage with document ID
-                  const docIndex = documents.findIndex(doc => doc.name === file.name && doc.date === documentInfo.date);
-                  if (docIndex !== -1) {
-                    documents[docIndex].id = currentDocumentId;
-                    documents[docIndex].file_path = filePath;
-                    localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
-                  }
+                  console.error('❌ Database error:', error);
+                  console.error('❌ Error code:', error.code);
+                  console.error('❌ Error message:', error.message);
+                  console.error('❌ Error details:', error.details);
+                  console.error('❌ Error hint:', error.hint);
+                  throw new Error(`Failed to save document to database: ${error.message || error.code || 'Unknown error'}`);
                 }
+                
+                if (!data || data.length === 0) {
+                  throw new Error('Document insert returned no data');
+                }
+                
+                // Store the document ID for later use
+                currentDocumentId = data[0].id;
+                console.log('✅ Document saved to Supabase with ID:', currentDocumentId);
+                console.log('✅ Document data:', data[0]);
+                
+                // Update localStorage with document info including ID
+                const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+                const documentInfo = {
+                  id: currentDocumentId,
+                  name: file.name,
+                  type: file.type,
+                  size: file.size,
+                  date: data[0].created_at || new Date().toISOString(),
+                  file_path: uploadSuccess ? filePath : null
+                };
+                
+                // Check if document already exists (by ID)
+                const existingIndex = documents.findIndex(doc => doc.id === currentDocumentId);
+                if (existingIndex !== -1) {
+                  documents[existingIndex] = documentInfo;
+                } else {
+                  documents.push(documentInfo);
+                }
+                localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
+                console.log('✅ Document saved to localStorage with ID:', currentDocumentId);
+                
+                return currentDocumentId;
               } catch (supabaseError) {
-                console.error('❌ Supabase error:', supabaseError.message || supabaseError);
-                // Continue - document is still saved to localStorage
+                const errorMsg = supabaseError?.message || String(supabaseError || 'Unknown error');
+                console.error('❌ Supabase save error:', errorMsg);
+                console.error('❌ Full error:', supabaseError);
+                
+                // Fallback: save to localStorage only
+                const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+                const documentInfo = {
+                  name: file.name,
+                  type: file.type,
+                  size: file.size,
+                  date: new Date().toISOString()
+                };
+                documents.push(documentInfo);
+                localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
+                console.warn('⚠️ Saved to localStorage only (Supabase save failed)');
+                return null;
               }
+            } else {
+              console.warn('⚠️ Supabase client not available, saving to localStorage only');
+              // Fallback to localStorage
+              const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
+              const documentInfo = {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                date: new Date().toISOString()
+              };
+              documents.push(documentInfo);
+              localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
+              return null;
             }
           } catch (e) {
-            console.error('❌ Error saving document:', e.message || e);
+            const errorMsg = e?.message || String(e || 'Unknown error');
+            console.error('❌ Error saving document:', errorMsg);
+            console.error('❌ Full error:', e);
+            return null;
           }
         }
 
