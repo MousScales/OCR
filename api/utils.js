@@ -63,8 +63,10 @@ async function extractTextFromFile(file) {
         } else {
           // Both methods failed - try cloud conversion as automatic fallback
           console.log("🔄 Automatically trying cloud-based PDF conversion...");
+          console.log("📋 Checking for PDF_CO_API_KEY:", process.env.PDF_CO_API_KEY ? "✅ SET" : "❌ NOT SET");
           try {
             const { pdfToImageCloud, extractTextWithVision } = require('./vision-utils');
+            console.log("📦 Calling pdfToImageCloud function...");
             const imageBuffer = await pdfToImageCloud(file.buffer);
             console.log("✅ Cloud PDF conversion successful, using Vision API...");
             visionText = await extractTextWithVision(imageBuffer);
@@ -85,49 +87,55 @@ async function extractTextFromFile(file) {
             }
             
             // Last resort: Try sending PDF directly to Vision API (some models might support it)
-            console.log("🔄 Attempting to send PDF directly to Vision API as last resort...");
-            try {
-              const { extractTextWithVision } = require('./vision-utils');
-              const OpenAI = require('openai');
-              const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-              
-              // Convert PDF to base64
-              const base64Pdf = file.buffer.toString('base64');
-              
-              // Try Vision API with PDF (might work with gpt-4o)
-              const response = await openai.chat.completions.create({
-                model: "gpt-4o",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      { 
-                        type: "text", 
-                        text: "Extract ALL text from this PDF document. Return the text exactly as it appears, preserving structure." 
-                      },
-                      {
-                        type: "image_url",
-                        image_url: {
-                          url: `data:application/pdf;base64,${base64Pdf}`
+            // BUT ONLY if it's not an API key configuration issue
+            if (!cloudErrorMsg.includes('API key') && !cloudErrorMsg.includes('not configured')) {
+              console.log("🔄 Attempting to send PDF directly to Vision API as last resort...");
+              try {
+                const { extractTextWithVision } = require('./vision-utils');
+                const OpenAI = require('openai');
+                const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+                
+                // Convert PDF to base64
+                const base64Pdf = file.buffer.toString('base64');
+                
+                // Try Vision API with PDF (might work with gpt-4o)
+                const response = await openai.chat.completions.create({
+                  model: "gpt-4o",
+                  messages: [
+                    {
+                      role: "user",
+                      content: [
+                        { 
+                          type: "text", 
+                          text: "Extract ALL text from this PDF document. Return the text exactly as it appears, preserving structure." 
+                        },
+                        {
+                          type: "image_url",
+                          image_url: {
+                            url: `data:application/pdf;base64,${base64Pdf}`
+                          }
                         }
-                      }
-                    ]
-                  }
-                ],
-                max_tokens: 4000
-              });
-              
-              visionText = response.choices[0].message.content;
-              if (visionText && visionText.trim().length > 0) {
-                console.log("✅ Direct PDF to Vision API succeeded!");
-                text = visionText;
-              } else {
-                throw new Error("No text extracted from PDF");
+                      ]
+                    }
+                  ],
+                  max_tokens: 4000
+                });
+                
+                visionText = response.choices[0].message.content;
+                if (visionText && visionText.trim().length > 0) {
+                  console.log("✅ Direct PDF to Vision API succeeded!");
+                  text = visionText;
+                } else {
+                  throw new Error("No text extracted from PDF");
+                }
+              } catch (directVisionError) {
+                console.error("❌ Direct PDF to Vision API also failed:", directVisionError.message);
+                // Final fallback: return helpful but user-friendly error
+                throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results.");
               }
-            } catch (directVisionError) {
-              console.error("❌ Direct PDF to Vision API also failed:", directVisionError.message);
-              // Final fallback: return helpful but user-friendly error
-              throw new Error("Unable to process this PDF automatically. The PDF appears to be a scanned document. Please convert it to an image (PNG/JPG) and upload that instead for better results.");
+            } else {
+              // API key issue - don't try Vision API, just throw the clear error
+              throw new Error(cloudErrorMsg);
             }
           }
         }
