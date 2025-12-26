@@ -10,76 +10,77 @@ async function extractTextFromFile(file) {
   let text = "";
 
   if (isPDF) {
-    // FORCE PDF to image conversion first, then fallback to text extraction if it fails
-    console.log("📸 FORCING PDF to image conversion...");
+    // Try pdf-parse FIRST (more reliable in serverless environments)
+    console.log("📄 Processing PDF with pdf-parse...");
     let pdfText = "";
     let visionText = "";
-    let imageConversionFailed = false;
-    let imageConversionError = "";
+    let pdfParseFailed = false;
+    let pdfParseError = "";
     
-    // Method 1: FORCE convert to image and use Vision API (REQUIRED)
+    // Method 1: Try pdf-parse first (works well for text-based PDFs)
     try {
-      const { pdfToImage, extractTextWithVision } = require('./vision-utils');
-      console.log("📸 Converting PDF to image (REQUIRED)...");
-      const imageBuffer = await pdfToImage(file.buffer);
-      console.log("✅ PDF converted to image, using Vision API...");
-      visionText = await extractTextWithVision(imageBuffer);
-      console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
-    } catch (visionError) {
-      imageConversionFailed = true;
-      imageConversionError = visionError.message || "PDF to image conversion failed";
-      console.error("❌ PDF to image conversion FAILED:", imageConversionError);
-      console.error("   Attempting fallback to PDF text extraction...");
+      const pdfData = await pdfParse(file.buffer);
+      pdfText = pdfData?.text || "";
+      console.log("✅ PDF text extracted with pdf-parse, length:", pdfText.length);
+      
+      // If PDF text is empty or very short, it's likely a scanned PDF
+      if (!pdfText || pdfText.trim().length < 10) {
+        console.warn("⚠️ PDF appears to be scanned (no extractable text). Attempting image conversion...");
+        pdfParseFailed = true;
+      }
+    } catch (parseError) {
+      pdfParseFailed = true;
+      pdfParseError = parseError.message || "PDF text extraction failed";
+      console.warn("⚠️ pdf-parse failed:", pdfParseError);
+      console.log("   Attempting PDF to image conversion...");
     }
     
-    // Method 2: Fallback to standard PDF text extraction if image conversion failed
-    if (imageConversionFailed) {
+    // Method 2: If pdf-parse failed or returned no text, try converting to image and using Vision API
+    if (pdfParseFailed || !pdfText || pdfText.trim().length < 10) {
       try {
-        console.log('📄 Processing PDF with pdf-parse (fallback)...');
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ Fallback: PDF text extracted, length:", pdfText.length);
+        const { pdfToImage, extractTextWithVision } = require('./vision-utils');
+        console.log("📸 Converting PDF to image for Vision API...");
+        const imageBuffer = await pdfToImage(file.buffer);
+        console.log("✅ PDF converted to image, using Vision API...");
+        visionText = await extractTextWithVision(imageBuffer);
+        console.log("✅ Vision API extracted text from PDF image, length:", visionText.length);
+      } catch (visionError) {
+        const visionErrorMsg = visionError.message || "PDF to image conversion failed";
+        console.error("❌ PDF to image conversion FAILED:", visionErrorMsg);
         
-        // If PDF text is empty or very short, it's likely a scanned PDF
-        if (!pdfText || pdfText.trim().length < 10) {
-          console.warn("⚠️ PDF appears to be scanned (no extractable text). PDF to image conversion is required but not available in serverless environment.");
+        // If we have some text from pdf-parse, use it even if it's short
+        if (pdfText && pdfText.trim().length > 0) {
+          console.log("✅ Using text from pdf-parse (even though it's short)");
+          text = pdfText;
+        } else {
+          // Both methods failed
+          let errorMsg;
+          if (visionErrorMsg.includes('PDF.js') || visionErrorMsg.includes('pdfjs-dist')) {
+            errorMsg = "This PDF appears to be a scanned document (image-based) with no extractable text. PDF to image conversion is not available in this serverless environment. Please convert the PDF to an image (PNG/JPG) and upload that instead for better text extraction.";
+          } else if (visionErrorMsg.includes('Canvas') || visionErrorMsg.includes('serverless') || visionErrorMsg.includes('native')) {
+            errorMsg = "PDF to image conversion is not available in this serverless environment (requires native dependencies). This PDF appears to be a scanned document with no extractable text. Please convert the PDF to an image (PNG/JPG) and upload that instead.";
+          } else {
+            errorMsg = `PDF text extraction failed: ${pdfParseError || 'unknown error'}. PDF to image conversion also failed: ${visionErrorMsg}. The PDF may be corrupted, password-protected, or a scanned document. Try converting the PDF to an image and uploading that instead.`;
+          }
+          throw new Error(errorMsg);
         }
-      } catch (parseError) {
-        console.error("❌ PDF text extraction also failed:", parseError.message);
-        // Don't throw yet - we'll check if we have any text below
-      }
-    } else {
-      // If image conversion succeeded, also try PDF text extraction for comprehensive analysis
-      try {
-        const pdfData = await pdfParse(file.buffer);
-        pdfText = pdfData?.text || "";
-        console.log("✅ Additional PDF text extracted, length:", pdfText.length);
-      } catch (parseError) {
-        console.warn("⚠️ PDF text extraction failed (non-critical):", parseError.message);
       }
     }
     
-    // Combine both sources
-    text = visionText || pdfText || "";
-    if (visionText && pdfText) {
-      // Merge both for comprehensive extraction
-      text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
+    // Combine both sources if we have both
+    if (!text) {
+      text = visionText || pdfText || "";
+      if (visionText && pdfText) {
+        // Merge both for comprehensive extraction
+        text = visionText + "\n\n[Additional PDF text:]\n" + pdfText;
+      }
     }
+    
     console.log("✅ PDF text extraction complete, total length:", text.length);
     
-    // If we have no text at all, throw error with helpful message
+    // Final check - if we still have no text, throw error
     if (!text || text.trim().length === 0) {
-      let errorMsg;
-      if (imageConversionFailed) {
-        if (imageConversionError.includes('Canvas') || imageConversionError.includes('serverless') || imageConversionError.includes('native')) {
-          errorMsg = "PDF to image conversion is not available in this serverless environment (requires native dependencies). This PDF appears to be a scanned document with no extractable text. Please convert the PDF to an image (PNG/JPG) and upload that instead for better text extraction.";
-        } else {
-          errorMsg = `PDF to image conversion failed: ${imageConversionError}. PDF text extraction also failed. The PDF may be corrupted, password-protected, or a scanned document with no extractable text. Try converting the PDF to an image and uploading that instead.`;
-        }
-      } else {
-        errorMsg = "Could not extract any text from PDF. The PDF may be corrupted, password-protected, or a scanned document. Try converting the PDF to an image (PNG/JPG) and uploading that instead.";
-      }
-      throw new Error(errorMsg);
+      throw new Error("Could not extract any text from PDF. The PDF may be corrupted, password-protected, or a scanned document. Try converting the PDF to an image (PNG/JPG) and uploading that instead.");
     }
   } else if (isImage) {
     try {
