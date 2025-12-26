@@ -7,80 +7,154 @@ const openai = new OpenAI({
 
 // Convert PDF to image using cloud service (fallback when local conversion fails)
 async function pdfToImageCloud(pdfBuffer) {
+  console.log('🌐 Attempting cloud-based PDF to image conversion...');
+  
+  const base64Pdf = pdfBuffer.toString('base64');
+  const apiKey = process.env.PDF_CO_API_KEY || process.env.PDF_API_KEY || '';
+  
+  if (!apiKey) {
+    console.error('❌ PDF conversion API key not configured in environment variables');
+    throw new Error('PDF conversion API key not configured. Please set PDF_CO_API_KEY in Vercel environment variables.');
+  }
+  
+  // Try pdf.co API - Method 1: Direct conversion
   try {
-    console.log('🌐 Attempting cloud-based PDF to image conversion...');
+    console.log('📡 Attempting pdf.co API conversion (method 1)...');
+    const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/png', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        file: `data:application/pdf;base64,${base64Pdf}`,
+        pages: '1',
+        async: false
+      })
+    });
     
-    // Try using pdf.co API for PDF to image conversion
-    const base64Pdf = pdfBuffer.toString('base64');
-    const apiKey = process.env.PDF_CO_API_KEY || process.env.PDF_API_KEY || '';
+    console.log('📡 pdf.co API response status:', response.status);
     
-    if (!apiKey) {
-      throw new Error('PDF conversion API key not configured');
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('❌ pdf.co API error response:', errorText.substring(0, 500));
+      throw new Error(`pdf.co API returned status ${response.status}`);
     }
     
-    // Use pdf.co API
+    const result = await response.json();
+    console.log('📡 pdf.co API result keys:', Object.keys(result));
+    
+    if (result.error) {
+      console.error('❌ pdf.co API error:', result.error);
+      throw new Error(`pdf.co API error: ${result.error}`);
+    }
+    
+    // Check for different response formats
+    let imageUrl = result.url || result.fileUrl || result.downloadUrl;
+    
+    if (imageUrl) {
+      console.log('📥 Downloading converted image from:', imageUrl);
+      const imageResponse = await fetch(imageUrl);
+      
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download converted image: ${imageResponse.status}`);
+      }
+      
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+      
+      const optimized = await sharp(imageBuffer)
+        .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      
+      console.log('✅ Cloud PDF conversion successful (pdf.co)');
+      return optimized;
+    }
+    
+    // Try alternative: if result has base64 image data
+    if (result.file) {
+      console.log('📥 Found base64 image data in response');
+      const imageBuffer = Buffer.from(result.file, 'base64');
+      const optimized = await sharp(imageBuffer)
+        .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      console.log('✅ Cloud PDF conversion successful (pdf.co base64)');
+      return optimized;
+    }
+    
+    throw new Error('pdf.co API did not return an image URL or data');
+  } catch (pdfCoError) {
+    console.error('❌ pdf.co method 1 failed:', pdfCoError.message);
+    
+    // Try alternative method: Upload first, then convert
     try {
-      console.log('📡 Calling pdf.co API for PDF conversion...');
-      const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/png', {
+      console.log('📡 Attempting pdf.co API conversion (method 2: upload then convert)...');
+      
+      // First upload the PDF
+      const uploadResponse = await fetch('https://api.pdf.co/v1/file/upload/base64', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey
         },
         body: JSON.stringify({
-          file: `data:application/pdf;base64,${base64Pdf}`,
+          file: base64Pdf,
+          name: 'document.pdf'
+        })
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status}`);
+      }
+      
+      const uploadResult = await uploadResponse.json();
+      const uploadedFileUrl = uploadResult.url;
+      
+      if (!uploadedFileUrl) {
+        throw new Error('Upload did not return a file URL');
+      }
+      
+      console.log('✅ PDF uploaded, converting to image...');
+      
+      // Then convert to PNG
+      const convertResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/png', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        },
+        body: JSON.stringify({
+          url: uploadedFileUrl,
           pages: '1',
           async: false
         })
       });
       
-      console.log('📡 pdf.co API response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('❌ pdf.co API error response:', errorText);
-        throw new Error(`pdf.co API returned status ${response.status}: ${errorText}`);
+      if (!convertResponse.ok) {
+        throw new Error(`Conversion failed: ${convertResponse.status}`);
       }
       
-      const result = await response.json();
-      console.log('📡 pdf.co API result:', JSON.stringify(result).substring(0, 200));
+      const convertResult = await convertResponse.json();
+      const imageUrl = convertResult.url || convertResult.fileUrl;
       
-      if (result.error) {
-        console.error('❌ pdf.co API error:', result.error);
-        throw new Error(`pdf.co API error: ${result.error}`);
-      }
-      
-      if (result.url) {
-        console.log('📥 Downloading converted image from:', result.url);
-        const imageResponse = await fetch(result.url);
-        
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download converted image: ${imageResponse.status}`);
-        }
-        
+      if (imageUrl) {
+        const imageResponse = await fetch(imageUrl);
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-        console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
-        
         const optimized = await sharp(imageBuffer)
           .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
           .png()
           .toBuffer();
-        
-        console.log('✅ Cloud PDF conversion successful (pdf.co)');
+        console.log('✅ Cloud PDF conversion successful (pdf.co method 2)');
         return optimized;
-      } else {
-        throw new Error('pdf.co API did not return an image URL');
       }
-    } catch (pdfCoError) {
-      console.error('❌ pdf.co conversion error:', pdfCoError.message || pdfCoError);
-      throw pdfCoError; // Re-throw to be caught by outer catch
+      
+      throw new Error('Conversion did not return an image URL');
+    } catch (method2Error) {
+      console.error('❌ pdf.co method 2 also failed:', method2Error.message);
+      throw new Error(`PDF conversion failed: ${pdfCoError.message}. Alternative method also failed: ${method2Error.message}`);
     }
-    
-    // If we get here, something unexpected happened
-    throw new Error('Cloud PDF conversion failed: ' + (error.message || 'Unknown error'));
-  } catch (error) {
-    console.error('Cloud PDF conversion error:', error.message);
-    throw error;
   }
 }
 
