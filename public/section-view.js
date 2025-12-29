@@ -721,8 +721,6 @@ async function deleteAllDocuments() {
       const filePaths = documents
         .map(doc => doc.file_path)
         .filter(path => path); // Remove null/undefined paths
-
-      const supabaseClient = window.supabaseClient || supabase;
       
       if (filePaths.length > 0) {
         console.log('Deleting files from Storage:', filePaths);
