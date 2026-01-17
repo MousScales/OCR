@@ -42,7 +42,10 @@
         <!-- Right Sidebar - Analysis -->
         <div class="column column-right">
           <div id="analysis-section" class="analysis-section">
-            <div class="analysis-title">Analysis</div>
+            <div class="analysis-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Analysis</span>
+              <button id="download-pdf-btn" class="download-btn" style="display: none; padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;" title="Download Document and Analysis as PDF">📥 Download PDF</button>
+            </div>
             <div id="analysis-meta" class="analysis-meta"></div>
             <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
             <div id="analyze-controls" style="display: none; padding: 16px; border-top: 1px solid #e5e7eb;">
@@ -106,37 +109,41 @@
       </div>
     </div>
 
-    <!-- Supabase Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <!-- PDF Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script>
-      // Supabase Configuration
-      window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
-      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
-      
-      // Wait for Supabase library to fully load
-      function waitForSupabase(callback) {
-        if (typeof window.supabase !== 'undefined' && window.supabase && window.supabase.createClient) {
-          // Create Supabase client
-          window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-          console.log('✅ Supabase client initialized in HTML');
-          callback();
-        } else {
-          // Wait and try again
-          setTimeout(() => waitForSupabase(callback), 50);
-        }
-      }
+      // Firebase Configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyAIwXiqg4oo-lWsZa5zBDFViMSZ1lLyE7o",
+        authDomain: "ocrr-b4765.firebaseapp.com",
+        projectId: "ocrr-b4765",
+        storageBucket: "ocrr-b4765.firebasestorage.app",
+        messagingSenderId: "314006504305",
+        appId: "1:314006504305:web:e2accd95fcc2d182236cd0",
+        measurementId: "G-Z5L66PQNYY"
+      };
+
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      window.firestore = firebase.firestore();
+      window.firebaseStorage = firebase.storage();
+      console.log('✅ Firebase initialized');
       
       // Initialize when DOM is ready
       function init() {
-        waitForSupabase(() => {
-          // Now load the main script
-          const script = document.createElement('script');
-          script.src = 'section-view.js';
-          script.onload = () => {
-            console.log('✅ section-view.js loaded');
-          };
-          document.body.appendChild(script);
-        });
+        // Now load the main script
+        const script = document.createElement('script');
+        script.src = 'section-view.js';
+        script.onload = () => {
+          console.log('✅ section-view.js loaded');
+        };
+        document.body.appendChild(script);
       }
       
       if (document.readyState === 'loading') {

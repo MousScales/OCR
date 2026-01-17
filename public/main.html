@@ -587,7 +587,10 @@
             </div>
             <div class="viewer-right">
               <div id="analysis-section" class="analysis-section">
-                <div class="analysis-title">Analysis</div>
+                <div class="analysis-title" style="display: flex; justify-content: space-between; align-items: center;">
+                  <span>Analysis</span>
+                  <button id="download-pdf-btn" class="download-btn" style="display: none; padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;" title="Download Document and Analysis as PDF">📥 Download PDF</button>
+                </div>
                 <div id="analysis-meta" class="analysis-meta"></div>
                 <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
                 <div id="analyze-controls" style="display: none; padding: 16px; border-top: 1px solid #e5e7eb;">
@@ -657,6 +660,10 @@
 
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- PDF Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script>
       // Supabase Configuration
       window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
@@ -1020,6 +1027,22 @@
              </div>` : ""}
           <div class="analysis-disclaimer" style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #d1d5db; color: #6b7280; font-size: 11px;">${disclaimer}</div>
         `;
+        
+        // Show and setup download button
+        const downloadBtn = document.getElementById('download-pdf-btn');
+        if (downloadBtn && window.currentDocument) {
+          downloadBtn.style.display = 'block';
+          // Get file URL from current document
+          const pdfViewer = document.getElementById('pdf-viewer');
+          const imageViewer = document.getElementById('image-viewer');
+          let fileUrl = null;
+          if (pdfViewer && pdfViewer.style.display !== 'none' && pdfViewer.src) {
+            fileUrl = pdfViewer.src.split('#')[0];
+          } else if (imageViewer && imageViewer.style.display !== 'none' && imageViewer.src) {
+            fileUrl = imageViewer.src;
+          }
+          downloadBtn.onclick = () => downloadDocumentWithAnalysis(window.currentDocument, analysis, fileUrl);
+        }
       }
 
       // Run analysis from viewer
@@ -1167,6 +1190,195 @@
       // Also check for documents added in the same session
       // This will be called when returning from index.html
       window.addEventListener("focus", loadDocuments);
+      
+      // Download document and analysis as combined PDF
+      async function downloadDocumentWithAnalysis(documentData, analysisData, fileUrl) {
+        try {
+          const downloadBtn = document.getElementById('download-pdf-btn');
+          if (downloadBtn) {
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = '⏳ Generating PDF...';
+          }
+
+          // Get the original document file
+          let originalPdfBytes = null;
+          let isImage = false;
+          let imageData = null;
+          const docType = documentData.type || 'application/pdf';
+
+          if (fileUrl) {
+            if (docType === 'application/pdf') {
+              const response = await fetch(fileUrl);
+              originalPdfBytes = await response.arrayBuffer();
+            } else if (docType.startsWith('image/')) {
+              isImage = true;
+              const response = await fetch(fileUrl);
+              imageData = await response.blob();
+            }
+          }
+
+          // If we don't have fileUrl, try to get from Supabase
+          if (!originalPdfBytes && !imageData && documentData.id) {
+            const supabaseClient = window.supabaseClient || supabase;
+            if (supabaseClient) {
+              const { data, error } = await supabaseClient
+                .from('documents')
+                .select('file_path, file_data')
+                .eq('id', documentData.id)
+                .single();
+
+              if (!error && data) {
+                if (data.file_path) {
+                  const { data: urlData } = supabaseClient.storage
+                    .from('documents')
+                    .getPublicUrl(data.file_path);
+                  const response = await fetch(urlData.publicUrl);
+                  if (docType === 'application/pdf') {
+                    originalPdfBytes = await response.arrayBuffer();
+                  } else {
+                    isImage = true;
+                    imageData = await response.blob();
+                  }
+                } else if (data.file_data) {
+                  let base64Data = data.file_data;
+                  if (typeof base64Data === 'object' && base64Data !== null && base64Data.data) {
+                    base64Data = base64Data.data;
+                  }
+                  if (typeof base64Data === 'string') {
+                    if (base64Data.includes(',')) {
+                      base64Data = base64Data.split(',')[1];
+                    }
+                    const binaryString = atob(base64Data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                      bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    if (docType === 'application/pdf') {
+                      originalPdfBytes = bytes.buffer;
+                    } else {
+                      isImage = true;
+                      imageData = new Blob([bytes], { type: docType });
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Create analysis PDF using jsPDF
+          const { jsPDF } = window.jspdf;
+          const analysisPdf = new jsPDF('p', 'mm', 'a4');
+          
+          // Get analysis HTML content
+          const analysisBody = document.getElementById('analysis-body');
+          const analysisMeta = document.getElementById('analysis-meta');
+          
+          // Create a temporary container for better PDF rendering
+          const tempContainer = document.createElement('div');
+          tempContainer.style.position = 'absolute';
+          tempContainer.style.left = '-9999px';
+          tempContainer.style.width = '210mm';
+          tempContainer.style.padding = '20mm';
+          tempContainer.style.backgroundColor = 'white';
+          tempContainer.style.fontFamily = 'Arial, sans-serif';
+          tempContainer.style.fontSize = '12px';
+          tempContainer.style.color = '#000';
+          
+          const analysisClone = analysisBody.cloneNode(true);
+          analysisClone.style.width = '100%';
+          analysisClone.style.padding = '0';
+          analysisClone.style.margin = '0';
+          
+          const title = document.createElement('h1');
+          title.textContent = analysisMeta.textContent || 'Document Analysis';
+          title.style.fontSize = '18px';
+          title.style.marginBottom = '15px';
+          title.style.color = '#111827';
+          tempContainer.appendChild(title);
+          tempContainer.appendChild(analysisClone);
+          document.body.appendChild(tempContainer);
+
+          const canvas = await html2canvas(tempContainer, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+          });
+
+          const imgData = canvas.toDataURL('image/png');
+          const imgWidth = 210;
+          const pageHeight = 297;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          let heightLeft = imgHeight;
+          let position = 0;
+
+          analysisPdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+
+          while (heightLeft > 0) {
+            position = heightLeft - imgHeight;
+            analysisPdf.addPage();
+            analysisPdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+          }
+
+          document.body.removeChild(tempContainer);
+          const analysisPdfBytes = analysisPdf.output('arraybuffer');
+
+          // Merge PDFs using pdf-lib
+          const { PDFDocument } = PDFLib;
+          const mergedPdf = await PDFDocument.create();
+
+          if (originalPdfBytes) {
+            const originalPdf = await PDFDocument.load(originalPdfBytes);
+            const pages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+            pages.forEach((page) => mergedPdf.addPage(page));
+          } else if (isImage && imageData) {
+            const imageBytes = await imageData.arrayBuffer();
+            let image;
+            if (docType.includes('png')) {
+              image = await mergedPdf.embedPng(imageBytes);
+            } else {
+              image = await mergedPdf.embedJpg(imageBytes);
+            }
+            const page = mergedPdf.addPage([image.width, image.height]);
+            page.drawImage(image, {
+              x: 0,
+              y: 0,
+              width: image.width,
+              height: image.height,
+            });
+          }
+
+          const analysisPdfDoc = await PDFDocument.load(analysisPdfBytes);
+          const analysisPages = await mergedPdf.copyPages(analysisPdfDoc, analysisPdfDoc.getPageIndices());
+          analysisPages.forEach((page) => mergedPdf.addPage(page));
+
+          const mergedPdfBytes = await mergedPdf.save();
+          const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${(documentData.name || 'document').replace(/\.[^/.]+$/, '')}_with_analysis.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = '📥 Download PDF';
+          }
+        } catch (error) {
+          console.error('Error generating PDF:', error);
+          alert('Error generating PDF: ' + error.message);
+          const downloadBtn = document.getElementById('download-pdf-btn');
+          if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = '📥 Download PDF';
+          }
+        }
+      }
     </script>
   </body>
 </html>

@@ -993,7 +993,10 @@
         <div class="drag-handle" id="drag-right"></div>
         <div class="column column-right" id="column-right">
       <div id="analysis-section" class="analysis-section">
-        <div class="analysis-title">Analysis</div>
+        <div class="analysis-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Analysis</span>
+          <button id="download-pdf-btn" class="download-btn" style="display: none; padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;" title="Download Document and Analysis as PDF">📥 Download PDF</button>
+        </div>
         <div id="analysis-meta" class="analysis-meta"></div>
         <div id="analysis-body" class="analysis-body analysis-empty">No analysis yet</div>
         </div>
@@ -1002,20 +1005,32 @@
     </div>
     </div>
 
-    <!-- Supabase Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- PDF Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script>
-      // Supabase Configuration
-      window.SUPABASE_URL = 'https://qecirwhseouzckdlqipg.supabase.co';
-      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlY2lyd2hzZW91emNrZGxxaXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNzYyODQsImV4cCI6MjA4MDY1MjI4NH0.ar6x-jUzJwKa6WtmM6vnHXmYnARQuLNN0OifdLMbOTo';
-      
-      // Create Supabase client
-      window.supabaseClient = null;
-      if (window.supabase) {
-        window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-        console.log('Supabase client initialized');
-      }
+      // Firebase Configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyAIwXiqg4oo-lWsZa5zBDFViMSZ1lLyE7o",
+        authDomain: "ocrr-b4765.firebaseapp.com",
+        projectId: "ocrr-b4765",
+        storageBucket: "ocrr-b4765.firebasestorage.app",
+        messagingSenderId: "314006504305",
+        appId: "1:314006504305:web:e2accd95fcc2d182236cd0",
+        measurementId: "G-Z5L66PQNYY"
+      };
+
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      window.firestore = firebase.firestore();
+      window.firebaseStorage = firebase.storage();
+      console.log('✅ Firebase initialized');
     </script>
     <script>
 
@@ -1067,84 +1082,61 @@
           selectDocText.textContent = currentSection === 'section2' ? 'Select Estate Document' : 'Select POA';
         }
 
-        // Function to save document to Supabase and localStorage
+        // Function to save document to Firebase and localStorage
         async function saveDocumentToStorage(file) {
           try {
             console.log('💾 Starting document save process...', { name: file.name, type: file.type, size: file.size });
             
-            // Save to Supabase FIRST (this is the source of truth)
-            if (window.supabaseClient) {
-              const supabase = window.supabaseClient;
+            // Save to Firebase FIRST (this is the source of truth)
+            const firestore = window.firestore;
+            const firebaseStorage = window.firebaseStorage;
+            
+            if (firestore) {
               try {
                 // Create unique filename with timestamp
                 const timestamp = Date.now();
                 const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                 const filePath = `${currentSection}/${fileName}`;
                 
-                // Try to upload file to Supabase Storage (optional - non-blocking)
+                // Try to upload file to Firebase Storage (optional - non-blocking)
                 let uploadSuccess = false;
                 let storageErrorMsg = null;
-                try {
-                  console.log('📤 Attempting to upload file to Storage...');
-                  const { data: uploadData, error: uploadError } = await supabase.storage
-                    .from('documents')
-                    .upload(filePath, file, {
-                      cacheControl: '3600',
-                      upsert: false
-                    });
-                  
-                  if (uploadError) {
-                    storageErrorMsg = uploadError.message || String(uploadError);
-                    if (storageErrorMsg.includes('Bucket not found')) {
-                      console.warn('⚠️ Storage bucket "documents" not found. Will save metadata only.');
-                    } else {
-                      console.warn('⚠️ Storage upload error:', storageErrorMsg);
-                    }
-                  } else {
+                if (firebaseStorage) {
+                  try {
+                    console.log('📤 Attempting to upload file to Firebase Storage...');
+                    const storageRef = firebaseStorage.ref(filePath);
+                    await storageRef.put(file);
                     uploadSuccess = true;
-                    console.log('✅ File uploaded to Storage:', uploadData.path);
+                    console.log('✅ File uploaded to Firebase Storage:', filePath);
+                  } catch (storageError) {
+                    storageErrorMsg = storageError.message || String(storageError);
+                    console.warn('⚠️ Firebase Storage upload error:', storageErrorMsg);
                   }
-                } catch (storageError) {
-                  storageErrorMsg = storageError.message || String(storageError);
-                  console.warn('⚠️ Storage upload exception:', storageErrorMsg);
                 }
                 
-                // ALWAYS save document record to database (even if storage fails)
+                // ALWAYS save document record to Firestore (even if storage fails)
                 const documentData = {
                   name: file.name,
                   type: file.type,
                   size: file.size,
                   section: currentSection,
-                  created_at: new Date().toISOString()
+                  created_at: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
                 if (uploadSuccess) {
                   documentData.file_path = filePath;
                 }
                 
-                console.log('💾 Saving document to database...', documentData);
-                const { data, error } = await supabase
-                  .from('documents')
-                  .insert([documentData])
-                  .select();
+                console.log('💾 Saving document to Firestore...', documentData);
+                const docRef = await firestore.collection('documents').add(documentData);
+                currentDocumentId = docRef.id;
                 
-                if (error) {
-                  console.error('❌ Database error:', error);
-                  console.error('❌ Error code:', error.code);
-                  console.error('❌ Error message:', error.message);
-                  console.error('❌ Error details:', error.details);
-                  console.error('❌ Error hint:', error.hint);
-                  throw new Error(`Failed to save document to database: ${error.message || error.code || 'Unknown error'}`);
-                }
+                // Get the created document to get the timestamp
+                const docSnap = await docRef.get();
+                const docData = docSnap.data();
                 
-                if (!data || data.length === 0) {
-                  throw new Error('Document insert returned no data');
-                }
-                
-                // Store the document ID for later use
-                currentDocumentId = data[0].id;
-                console.log('✅ Document saved to Supabase with ID:', currentDocumentId);
-                console.log('✅ Document data:', data[0]);
+                console.log('✅ Document saved to Firebase with ID:', currentDocumentId);
+                console.log('✅ Document data:', docData);
                 
                 // Update localStorage with document info including ID
                 const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
@@ -1153,7 +1145,7 @@
                   name: file.name,
                   type: file.type,
                   size: file.size,
-                  date: data[0].created_at || new Date().toISOString(),
+                  date: docData.created_at?.toDate ? docData.created_at.toDate().toISOString() : new Date().toISOString(),
                   file_path: uploadSuccess ? filePath : null
                 };
                 
@@ -1168,10 +1160,10 @@
                 console.log('✅ Document saved to localStorage with ID:', currentDocumentId);
                 
                 return currentDocumentId;
-              } catch (supabaseError) {
-                const errorMsg = supabaseError?.message || String(supabaseError || 'Unknown error');
-                console.error('❌ Supabase save error:', errorMsg);
-                console.error('❌ Full error:', supabaseError);
+              } catch (firebaseError) {
+                const errorMsg = firebaseError?.message || String(firebaseError || 'Unknown error');
+                console.error('❌ Firebase save error:', errorMsg);
+                console.error('❌ Full error:', firebaseError);
                 
                 // Fallback: save to localStorage only
                 const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
@@ -1183,11 +1175,11 @@
                 };
                 documents.push(documentInfo);
                 localStorage.setItem(`${currentSection}_documents`, JSON.stringify(documents));
-                console.warn('⚠️ Saved to localStorage only (Supabase save failed)');
+                console.warn('⚠️ Saved to localStorage only (Firebase save failed)');
                 return null;
               }
             } else {
-              console.warn('⚠️ Supabase client not available, saving to localStorage only');
+              console.warn('⚠️ Firebase not available, saving to localStorage only');
               // Fallback to localStorage
               const documents = JSON.parse(localStorage.getItem(`${currentSection}_documents`) || '[]');
               const documentInfo = {
@@ -1984,60 +1976,44 @@
               analysisBody.classList.remove("analysis-empty", "analysis-analyzing");
 
               // Save analysis to Supabase if available
-              if (window.supabaseClient && currentDocumentId) {
-                const supabase = window.supabaseClient;
+              const firestore = window.firestore;
+              if (firestore && currentDocumentId) {
                 try {
-                  console.log('💾 Saving analysis to Supabase for document ID:', currentDocumentId);
-                  const { error: updateError } = await supabase
-                    .from('documents')
-                    .update({ 
-                      analysis_data: a,
-                      updated_at: new Date().toISOString()
-                    })
-                    .eq('id', currentDocumentId);
-
-                  if (updateError) {
-                    console.error('❌ Error saving analysis to Supabase:', updateError.message || updateError);
-                  } else {
-                    console.log('✅ Analysis saved to Supabase successfully');
-                  }
-                } catch (supabaseError) {
-                  console.error('❌ Error saving analysis:', supabaseError.message || supabaseError);
+                  console.log('💾 Saving analysis to Firebase for document ID:', currentDocumentId);
+                  await firestore.collection('documents').doc(currentDocumentId).update({ 
+                    analysis_data: a,
+                    updated_at: firebase.firestore.FieldValue.serverTimestamp()
+                  });
+                  console.log('✅ Analysis saved to Firebase successfully');
+                } catch (firebaseError) {
+                  console.error('❌ Error saving analysis to Firebase:', firebaseError.message || firebaseError);
                 }
-              } else if (window.supabaseClient && file) {
+              } else if (firestore && file) {
                 // Fallback: try to find document by name if ID not available
-                const supabase = window.supabaseClient;
                 try {
                   console.log('⚠️ Document ID not available, trying to find by name...');
-                  const { data: docs, error: findError } = await supabase
-                    .from('documents')
-                    .select('id')
-                    .eq('name', file.name)
-                    .eq('section', currentSection)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
+                  const snapshot = await firestore
+                    .collection('documents')
+                    .where('name', '==', file.name)
+                    .where('section', '==', currentSection)
+                    .orderBy('created_at', 'desc')
+                    .limit(1)
+                    .get();
 
-                  if (!findError && docs && docs.length > 0) {
-                    const docId = docs[0].id;
+                  if (!snapshot.empty) {
+                    const doc = snapshot.docs[0];
+                    const docId = doc.id;
                     currentDocumentId = docId; // Store for future use
-                    const { error: updateError } = await supabase
-                      .from('documents')
-                      .update({ 
-                        analysis_data: a,
-                        updated_at: new Date().toISOString()
-                      })
-                      .eq('id', docId);
-
-                    if (updateError) {
-                      console.error('❌ Error saving analysis to Supabase:', updateError.message || updateError);
-                    } else {
-                      console.log('✅ Analysis saved to Supabase (found by name)');
-                    }
+                    await firestore.collection('documents').doc(docId).update({ 
+                      analysis_data: a,
+                      updated_at: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('✅ Analysis saved to Firebase (found by name)');
                   } else {
-                    console.warn('⚠️ Could not find document in Supabase to save analysis');
+                    console.warn('⚠️ Could not find document in Firebase to save analysis');
                   }
-                } catch (supabaseError) {
-                  console.error('❌ Error saving analysis:', supabaseError.message || supabaseError);
+                } catch (firebaseError) {
+                  console.error('❌ Error saving analysis:', firebaseError.message || firebaseError);
                 }
               }
 
@@ -2189,6 +2165,13 @@
               
               // Setup click handlers for field highlighting
               setupFieldHighlighting();
+              
+              // Show and setup download button
+              const downloadBtn = document.getElementById('download-pdf-btn');
+              if (downloadBtn && currentFile) {
+                downloadBtn.style.display = 'block';
+                downloadBtn.onclick = () => downloadDocumentWithAnalysis(currentFile, data.analysis);
+              }
             }
           } catch (err) {
             try {
@@ -2272,6 +2255,153 @@
         // Highlight text on document (removed - no longer used)
         function highlightTextOnDocument(text, fieldName) {
           // Interactive highlighting removed
+        }
+        
+        // Download document and analysis as combined PDF
+        async function downloadDocumentWithAnalysis(file, analysisData) {
+          try {
+            const downloadBtn = document.getElementById('download-pdf-btn');
+            if (downloadBtn) {
+              downloadBtn.disabled = true;
+              downloadBtn.textContent = '⏳ Generating PDF...';
+            }
+
+            // Get the original document file
+            let originalPdfBytes = null;
+            let isImage = false;
+            let imageData = null;
+
+            if (file) {
+              if (file.type === 'application/pdf') {
+                originalPdfBytes = await file.arrayBuffer();
+              } else if (file.type.startsWith('image/')) {
+                isImage = true;
+                imageData = file;
+              }
+            }
+
+            // Create analysis PDF using jsPDF
+            const { jsPDF } = window.jspdf;
+            const analysisPdf = new jsPDF('p', 'mm', 'a4');
+            
+            // Get analysis HTML content
+            const analysisBody = document.getElementById('analysis-body');
+            const analysisMeta = document.getElementById('analysis-meta');
+            
+            // Create a temporary container for better PDF rendering
+            const tempContainer = document.createElement('div');
+            tempContainer.style.position = 'absolute';
+            tempContainer.style.left = '-9999px';
+            tempContainer.style.width = '210mm'; // A4 width
+            tempContainer.style.padding = '20mm';
+            tempContainer.style.backgroundColor = 'white';
+            tempContainer.style.fontFamily = 'Arial, sans-serif';
+            tempContainer.style.fontSize = '12px';
+            tempContainer.style.color = '#000';
+            
+            // Clone analysis content
+            const analysisClone = analysisBody.cloneNode(true);
+            analysisClone.style.width = '100%';
+            analysisClone.style.padding = '0';
+            analysisClone.style.margin = '0';
+            
+            // Add title
+            const title = document.createElement('h1');
+            title.textContent = analysisMeta.textContent || 'Document Analysis';
+            title.style.fontSize = '18px';
+            title.style.marginBottom = '15px';
+            title.style.color = '#111827';
+            tempContainer.appendChild(title);
+            tempContainer.appendChild(analysisClone);
+            document.body.appendChild(tempContainer);
+
+            // Convert to canvas and add to PDF
+            const canvas = await html2canvas(tempContainer, {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            analysisPdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              analysisPdf.addPage();
+              analysisPdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pageHeight;
+            }
+
+            // Clean up
+            document.body.removeChild(tempContainer);
+
+            const analysisPdfBytes = analysisPdf.output('arraybuffer');
+
+            // Merge PDFs using pdf-lib
+            const { PDFDocument } = PDFLib;
+            const mergedPdf = await PDFDocument.create();
+
+            // Add original document (first page)
+            if (originalPdfBytes) {
+              const originalPdf = await PDFDocument.load(originalPdfBytes);
+              const pages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+              pages.forEach((page) => mergedPdf.addPage(page));
+            } else if (isImage && imageData) {
+              // Convert image to PDF page
+              const imageBytes = await imageData.arrayBuffer();
+              let image;
+              if (file.type.includes('png')) {
+                image = await mergedPdf.embedPng(imageBytes);
+              } else {
+                image = await mergedPdf.embedJpg(imageBytes);
+              }
+              const page = mergedPdf.addPage([image.width, image.height]);
+              page.drawImage(image, {
+                x: 0,
+                y: 0,
+                width: image.width,
+                height: image.height,
+              });
+            }
+
+            // Add analysis PDF (second page)
+            const analysisPdfDoc = await PDFDocument.load(analysisPdfBytes);
+            const analysisPages = await mergedPdf.copyPages(analysisPdfDoc, analysisPdfDoc.getPageIndices());
+            analysisPages.forEach((page) => mergedPdf.addPage(page));
+
+            // Generate and download
+            const mergedPdfBytes = await mergedPdf.save();
+            const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${file.name.replace(/\.[^/.]+$/, '')}_with_analysis.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            if (downloadBtn) {
+              downloadBtn.disabled = false;
+              downloadBtn.textContent = '📥 Download PDF';
+            }
+          } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Error generating PDF: ' + error.message);
+            const downloadBtn = document.getElementById('download-pdf-btn');
+            if (downloadBtn) {
+              downloadBtn.disabled = false;
+              downloadBtn.textContent = '📥 Download PDF';
+            }
+          }
         }
       })();
     </script>

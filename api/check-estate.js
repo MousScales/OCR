@@ -123,7 +123,7 @@ module.exports = async (req, res) => {
 
     // Call OpenAI
     console.log('🤖 Calling OpenAI for classification...');
-    const systemPrompt = `You are a document classifier. Analyze the provided document text and determine if it is a court-issued estate document (letters of administration, letters testamentary, letters of office, certification of qualification/administration, letters of authority).
+    const systemPrompt = `You are a document classifier. Analyze the provided document text and determine if it is an estate document. Estate documents include both court-issued documents (letters of administration, letters testamentary, letters of office, certification of qualification/administration, letters of authority) and small estate affidavits.
 Also extract the state mentioned in the document if present.
 Respond ONLY with valid JSON, no extra text.
 JSON format:
@@ -141,8 +141,9 @@ Document types to look for:
 - "Certification of Qualification/Administration"
 - "Letters of Authority"
 - "Executor" (if it's a court-issued letter appointing an executor)
+- "Small Estate Affidavit" (also known as "Affidavit for Collection of Small Estate", "Small Estate Affidavit of Collection", or similar state-specific names)
 
-Note: Small estate affidavits are NOT court-issued documents and should return isEstateDocument: false.`;
+Note: Small estate affidavits ARE estate documents and should return isEstateDocument: true with documentType: "Small Estate Affidavit".`;
 
     const userPrompt = `Analyze this document text and determine if it is a court-issued estate document. Also extract the U.S. state mentioned in the document (look for 'State of [X]', 'under the laws of [X]', court names, or state names in addresses):\n\n${text.slice(0, 8000)}`;
 

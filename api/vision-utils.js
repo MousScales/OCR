@@ -231,11 +231,11 @@ async function analyzeWithVision(imageBuffer, documentType = 'POA', state = '') 
     const isPOA = documentType === 'POA';
     const systemPrompt = isPOA 
       ? "You are a document classifier analyzing a Power of Attorney document. Look at this image and determine if it is a POA document. Also extract the state mentioned if visible. Respond with JSON: {isPOA: boolean, poaType: string|null, detectedState: string|null, confidence: string}. Look for signatures, handwritten text, and state information."
-      : "You are a document classifier analyzing a court-issued estate document. Look at this image and determine if it is an estate document (Letters of Administration, Letters Testamentary, etc.). Also extract the state mentioned if visible. Respond with JSON: {isEstateDocument: boolean, documentType: string|null, detectedState: string|null, confidence: string}. Look for court seals, judge signatures, handwritten text, and state information.";
+      : "You are a document classifier analyzing an estate document. Look at this image and determine if it is an estate document, including court-issued documents (Letters of Administration, Letters Testamentary, etc.) or small estate affidavits. Also extract the state mentioned if visible. Respond with JSON: {isEstateDocument: boolean, documentType: string|null, detectedState: string|null, confidence: string}. Look for court seals, judge signatures, notary seals, handwritten text, and state information.";
     
     const userPrompt = isPOA
       ? "Analyze this document image. Is this a Power of Attorney document? What type? What state is mentioned? Can you see any handwritten signatures or text?"
-      : "Analyze this document image. Is this a court-issued estate document? What type? What state is mentioned? Can you see any handwritten signatures, court seals, or text?";
+      : "Analyze this document image. Is this an estate document (court-issued or small estate affidavit)? What type? What state is mentioned? Can you see any handwritten signatures, court seals, notary seals, or text?";
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // Use vision-capable model

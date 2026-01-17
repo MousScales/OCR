@@ -720,26 +720,26 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
     }
 
     const systemPrompt =
-      "You are a paralegal assistant helping review court-issued estate documents (letters of administration, letters testamentary, etc.). " +
+      "You are a paralegal assistant helping review estate documents, including both court-issued documents (letters of administration, letters testamentary, etc.) and small estate affidavits. " +
       "You are not a lawyer and you do not give legal advice. " +
-      "Given the raw text of a court-issued estate document and the U.S. state it is meant for, you must respond ONLY with strict JSON, no extra text. " +
+      "Given the raw text of an estate document and the U.S. state it is meant for, you must respond ONLY with strict JSON, no extra text. " +
       "JSON shape:\n" +
       "{\n" +
       '  "extractedFields": {\n' +
-      '    "documentType": string | null,              // "Letters of Administration", "Letters Testamentary", "Letters of Office", etc.\n' +
+      '    "documentType": string | null,              // "Letters of Administration", "Letters Testamentary", "Letters of Office", "Small Estate Affidavit", etc.\n' +
       '    "estateName": string | null,                  // "Estate of [Name]" or name of the estate\n' +
       '    "decedentName": string | null,                // Full legal name of the deceased individual\n' +
-      '    "representativeNames": string[],              // Array of all appointed representative names\n' +
-      '    "typeOfAdministration": string | null,       // "unsupervised", "supervised", "formal unsupervised", etc.\n' +
-      '    "administrationLimitations": string | null,  // Any limitations or restrictions mentioned\n' +
-      '    "requiresCourtApproval": boolean | null,      // Whether actions require court approval\n' +
-      '    "state": string | null,                      // State where the court is located\n' +
-      '    "courtName": string | null,                   // Name of the court issuing the document\n' +
-      '    "judgeName": string | null,                   // Name of the judge signing the document\n' +
-      '    "judgeSignatureDetected": boolean,            // Whether judge\'s signature is present\n' +
-      '    "effectiveDate": string | null,              // Explicit effective date if stated\n' +
-      '    "judgeSignatureDate": string | null,          // Date the judge signed the document\n' +
-      '    "stampOrSealDetected": boolean,              // Whether a stamp or seal is present\n' +
+      '    "representativeNames": string[],              // Array of all appointed representative names or affiant(s)\n' +
+      '    "typeOfAdministration": string | null,       // "unsupervised", "supervised", "formal unsupervised", "small estate", etc.\n' +
+      '    "administrationLimitations": string | null,  // Any limitations or restrictions mentioned (for small estate affidavits, look for estate value limits)\n' +
+      '    "requiresCourtApproval": boolean | null,      // Whether actions require court approval (for small estate affidavits, typically false)\n' +
+      '    "state": string | null,                      // State where the court is located or where the affidavit is executed\n' +
+      '    "courtName": string | null,                   // Name of the court issuing the document (for small estate affidavits, may be null)\n' +
+      '    "judgeName": string | null,                   // Name of the judge signing the document (for small estate affidavits, may be null)\n' +
+      '    "judgeSignatureDetected": boolean,            // Whether judge\'s signature is present (for small estate affidavits, typically false)\n' +
+      '    "effectiveDate": string | null,              // Explicit effective date if stated, or notarization date for affidavits\n' +
+      '    "judgeSignatureDate": string | null,          // Date the judge signed the document (for small estate affidavits, may be null)\n' +
+      '    "stampOrSealDetected": boolean,              // Whether a stamp or seal is present (for small estate affidavits, look for notary seal)\n' +
       '    "expirationDate": string | null,             // Expiration date if stated\n' +
       '    "terminationClauses": string[],              // Array of termination clauses or conditions\n' +
       '    "pageCount": string | null,                   // "Page X of Y" format if available\n' +
@@ -752,19 +752,20 @@ app.post("/analyze-estate", upload.single("file"), async (req, res) => {
       '  "recommendations": string[],                     // concrete suggestions for what to fix/add\n' +
       '  "disclaimer": string                            // clear disclaimer that this is not legal advice\n' +
       "}\n" +
-      "For extractedFields: Look for keywords like 'Executor', 'Letters of Administration', 'Letters Testamentary', 'appoints', 'representative', 'decedent', 'Estate of', 'Judge', 'Court', etc. " +
+      "For extractedFields: Look for keywords like 'Executor', 'Letters of Administration', 'Letters Testamentary', 'Small Estate Affidavit', 'Affidavit for Collection of Small Estate', 'appoints', 'representative', 'decedent', 'Estate of', 'Judge', 'Court', 'affiant', 'heir', etc. " +
       "Extract dates near signature sections and look for page numbering. " +
       "When analyzing compliance, consider state-specific requirements for estate documents including: " +
       "required document format, signature requirements, notarization rules, court approval processes, " +
       "administration types (supervised vs unsupervised), limitations on representative authority, " +
       "state-specific terminology, and any unique state procedures or requirements. " +
+      "For small estate affidavits, pay special attention to: notarization requirements, estate value limits, required information (decedent name, date of death, estate value, heirs/beneficiaries), and state-specific affidavit formats. " +
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
 
     const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
-    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology.";
+    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. For small estate affidavits, also consider estate value limits and state-specific affidavit requirements. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology. For small estate affidavits, also consider estate value limits and affidavit-specific requirements.";
     const userPrompt =
       stateContext +
-      "The following text is from a court-issued estate document (letters of administration, letters testamentary, etc.). " +
+      "The following text is from an estate document (letters of administration, letters testamentary, small estate affidavit, etc.). " +
       "Analyze it according to the schema above, " + stateSpecificText + "\n\n" +
       "Document text:\n" +
       text.slice(0, 12000);
@@ -1006,18 +1007,18 @@ app.post("/check-estate", upload.single("file"), async (req, res) => {
     }
 
     const systemPrompt =
-      "You are a document classifier. Analyze the provided document text and determine if it is a court-issued estate document. " +
+      "You are a document classifier. Analyze the provided document text and determine if it is an estate document. Estate documents include both court-issued documents (letters of administration, letters testamentary, letters of office, certification of qualification/administration, letters of authority) and small estate affidavits. " +
       "Also extract the state mentioned in the document if present. " +
       "Respond ONLY with strict JSON, no extra text. " +
       "JSON shape:\n" +
       "{\n" +
-      '  "isEstateDocument": boolean,                    // true if this is a court-issued estate document, false otherwise\n' +
-      '  "documentType": string | null,                  // if isEstateDocument is true, specify the type (e.g., "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority"). If false, set to null\n' +
+      '  "isEstateDocument": boolean,                    // true if this is an estate document (court-issued or small estate affidavit), false otherwise\n' +
+      '  "documentType": string | null,                  // if isEstateDocument is true, specify the type (e.g., "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority", "Small Estate Affidavit"). If false, set to null\n' +
       '  "detectedState": string | null,                 // The U.S. state mentioned in the document (e.g., "California", "New York", "Texas"). Extract from phrases like "State of [X]", "under the laws of [X]", court names, or addresses. If not found, set to null\n' +
       '  "confidence": string                            // "high", "medium", or "low" indicating confidence in the classification\n' +
       "}\n" +
-      "Look for keywords: 'Executor', 'Letters of Administration', 'Letters Testamentary', 'Letters of Office', 'Certification of Qualification/Administration', 'Letters of Authority'. " +
-      "Note: Small estate affidavits are NOT court-issued documents and should return isEstateDocument: false. " +
+      "Look for keywords: 'Executor', 'Letters of Administration', 'Letters Testamentary', 'Letters of Office', 'Certification of Qualification/Administration', 'Letters of Authority', 'Small Estate Affidavit', 'Affidavit for Collection of Small Estate', 'Small Estate Affidavit of Collection', 'affiant', 'heir'. " +
+      "Note: Small estate affidavits ARE estate documents and should return isEstateDocument: true with documentType: 'Small Estate Affidavit'. " +
       "Do not wrap the JSON in markdown. Do not add any explanation before or after the JSON.";
 
     const userPrompt =

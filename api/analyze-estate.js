@@ -117,8 +117,8 @@ module.exports = async (req, res) => {
 
     // Call OpenAI
     console.log('🤖 Calling OpenAI for analysis...');
-    const systemPrompt = `You are a paralegal assistant helping review court-issued estate documents (letters of administration, letters testamentary, etc.). You are not a lawyer and do not give legal advice.
-Given the raw text of a court-issued estate document and the U.S. state, respond ONLY with valid JSON, no extra text.
+    const systemPrompt = `You are a paralegal assistant helping review estate documents, including both court-issued documents (letters of administration, letters testamentary, etc.) and small estate affidavits. You are not a lawyer and do not give legal advice.
+Given the raw text of an estate document and the U.S. state, respond ONLY with valid JSON, no extra text.
 JSON format:
 {
   "extractedFields": {
@@ -150,30 +150,30 @@ JSON format:
 }
 
 Extraction guidelines:
-- documentType: Look for "Executor", "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority". Flag if misclassified.
+- documentType: Look for "Executor", "Letters of Administration", "Letters Testamentary", "Letters of Office", "Certification of Qualification/Administration", "Letters of Authority", or "Small Estate Affidavit" (also known as "Affidavit for Collection of Small Estate", "Small Estate Affidavit of Collection", or similar state-specific names). Flag if misclassified.
 - estateName: Look for "Estate of [Name]" or the name of the decedent
 - decedentName: Full legal name of the deceased individual
-- representativeNames: Names of appointed representative(s) - look for "executor", "representative", "executrix", "personal representative", "appoints"
-- typeOfAdministration: Look for "unsupervised", "supervised", "formal unsupervised", "formal supervised"
-- administrationLimitations: Any limitations or restrictions mentioned
-- requiresCourtApproval: Whether actions require court approval
-- state: State where the court is located
-- courtName: Name of the court issuing the document
-- judgeName: Name of the judge signing the document
-- judgeSignatureDetected: Whether judge's signature is present
-- effectiveDate: Explicit effective date if stated, otherwise use judge signature date
-- judgeSignatureDate: Date the judge signed the document
-- stampOrSealDetected: Whether a stamp or seal is present
+- representativeNames: Names of appointed representative(s) or affiant(s) - look for "executor", "representative", "executrix", "personal representative", "appoints", "affiant", "heir"
+- typeOfAdministration: Look for "unsupervised", "supervised", "formal unsupervised", "formal supervised", or "small estate" (for small estate affidavits)
+- administrationLimitations: Any limitations or restrictions mentioned (for small estate affidavits, look for estate value limits or other restrictions)
+- requiresCourtApproval: Whether actions require court approval (for small estate affidavits, this is typically false)
+- state: State where the court is located or where the affidavit is executed
+- courtName: Name of the court issuing the document (for small estate affidavits, this may be null)
+- judgeName: Name of the judge signing the document (for small estate affidavits, this may be null)
+- judgeSignatureDetected: Whether judge's signature is present (for small estate affidavits, this is typically false)
+- effectiveDate: Explicit effective date if stated, otherwise use judge signature date or notarization date
+- judgeSignatureDate: Date the judge signed the document (for small estate affidavits, this may be null)
+- stampOrSealDetected: Whether a stamp or seal is present (for small estate affidavits, look for notary seal)
 - expirationDate: Expiration date if stated
 - terminationClauses: Any termination clauses or conditions
 - pageCount: "Page X of Y" format if available
 - completenessCheck: Verify all pages present, flag missing or out-of-order pages
 
-When analyzing compliance, consider state-specific requirements for estate documents including: required document format, signature requirements, notarization rules, court approval processes, administration types (supervised vs unsupervised), limitations on representative authority, state-specific terminology, and any unique state procedures or requirements.`;
+When analyzing compliance, consider state-specific requirements for estate documents including: required document format, signature requirements, notarization rules, court approval processes, administration types (supervised vs unsupervised), limitations on representative authority, state-specific terminology, and any unique state procedures or requirements. For small estate affidavits, pay special attention to: notarization requirements, estate value limits, required information (decedent name, date of death, estate value, heirs/beneficiaries), and state-specific affidavit formats.`;
 
     const stateContext = state ? `State: ${state}\n\n` : "No specific state provided. ";
-    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology.";
-    const userPrompt = stateContext + `Analyze this court-issued estate document text according to the schema above, ` + stateSpecificText + `\n\nDocument text:\n\n${text.slice(0, 12000)}`;
+    const stateSpecificText = state ? `focusing on whether it appears to follow the rules, requirements, and format for this specific state (${state}). Consider state-specific requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and any state-specific terminology or procedures. For small estate affidavits, also consider estate value limits and state-specific affidavit requirements. Identify what might need to be corrected or added to ensure compliance with ${state} state law.` : "providing a general assessment of the document. Consider general requirements for: document format, required signatures, notarization requirements, court approval processes, administration types (supervised vs unsupervised), limitations, and terminology. For small estate affidavits, also consider estate value limits and affidavit-specific requirements.";
+    const userPrompt = stateContext + `Analyze this estate document text according to the schema above, ` + stateSpecificText + `\n\nDocument text:\n\n${text.slice(0, 12000)}`;
 
     let completion;
     try {
