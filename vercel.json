@@ -15,6 +15,9 @@
     },
     "api/convert-pdf-to-image.js": {
       "maxDuration": 60
+    },
+    "api/fetch-file.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

@@ -57,19 +57,26 @@ async function loadDocuments() {
   if (firestore) {
     try {
       console.log(`📥 Loading documents from Firebase for section: ${section}`);
+      // Query without orderBy first to avoid index requirement, then sort in memory
       const snapshot = await firestore
         .collection('documents')
         .where('section', '==', section)
-        .orderBy('created_at', 'desc')
         .get();
+      
+      // Sort by created_at in memory
+      const sortedDocs = snapshot.docs.sort((a, b) => {
+        const aTime = a.data().created_at?.toMillis ? a.data().created_at.toMillis() : 0;
+        const bTime = b.data().created_at?.toMillis ? b.data().created_at.toMillis() : 0;
+        return bTime - aTime; // Descending order
+      });
 
-      if (snapshot.empty) {
+      if (sortedDocs.length === 0) {
         console.log('📭 No documents found in Firebase');
         documents = JSON.parse(localStorage.getItem(`${section}_documents`) || '[]');
         console.log('📦 Loaded', documents.length, 'documents from localStorage (fallback)');
       } else {
-        console.log('✅ Loaded', snapshot.size, 'documents from Firebase');
-        documents = snapshot.docs.map(doc => {
+        console.log('✅ Loaded', sortedDocs.length, 'documents from Firebase');
+        documents = sortedDocs.map(doc => {
           const data = doc.data();
           return {
             id: doc.id,
@@ -778,40 +785,83 @@ async function downloadDocumentWithAnalysis(docId, docName, docType, analysisDat
     let isImage = false;
     let imageData = null;
 
-    if (fileUrl) {
-      if (docType === 'application/pdf') {
-        // Fetch PDF file
-        const response = await fetch(fileUrl);
-        originalPdfBytes = await response.arrayBuffer();
-      } else if (docType.startsWith('image/')) {
-        // Fetch image file
-        isImage = true;
-        const response = await fetch(fileUrl);
-        imageData = await response.blob();
-      }
-    }
+    console.log('🔍 Starting to retrieve original document...', { docId, docType, fileUrl: fileUrl ? 'provided' : 'not provided' });
 
-    // If we don't have fileUrl, try to get from Firebase
-    if (!originalPdfBytes && !imageData) {
-      const firestore = window.firestore || db;
-      const firebaseStorage = window.firebaseStorage || storage;
-      if (firestore && docId) {
+    // Use Firebase Storage SDK methods to avoid CORS issues
+    const firebaseStorage = window.firebaseStorage || storage;
+    const firestore = window.firestore || db;
+    
+    // First, try to get file from Firebase Storage using SDK methods (avoids CORS)
+    if (firebaseStorage && firestore && docId) {
+      try {
+        console.log('📥 Fetching document metadata from Firestore...');
+        // Get document to find file_path
         const docRef = firestore.collection('documents').doc(docId);
         const docSnap = await docRef.get();
-
+        
         if (docSnap.exists) {
           const data = docSnap.data();
-          if (data.file_path && firebaseStorage) {
+          console.log('📄 Document data:', { file_path: data.file_path, has_file_data: !!data.file_data });
+          
+          if (data.file_path) {
+            console.log('📦 Getting file from Firebase Storage:', data.file_path);
             const storageRef = firebaseStorage.ref(data.file_path);
-            const url = await storageRef.getDownloadURL();
-            const response = await fetch(url);
-            if (docType === 'application/pdf') {
-              originalPdfBytes = await response.arrayBuffer();
-            } else {
-              isImage = true;
-              imageData = await response.blob();
+            
+            try {
+              if (docType === 'application/pdf') {
+                // Use getBytes() which handles CORS automatically
+                console.log('📥 Downloading PDF bytes...');
+                const bytes = await storageRef.getBytes();
+                originalPdfBytes = bytes.buffer;
+                console.log('✅ Got PDF from Firebase Storage, size:', originalPdfBytes.byteLength, 'bytes');
+              } else if (docType.startsWith('image/')) {
+                isImage = true;
+                // Use server proxy to fetch image (avoids CORS)
+                console.log('📥 Fetching image via server proxy (avoids CORS)...');
+                try {
+                  const proxyUrl = `/api/fetch-file?path=${encodeURIComponent(data.file_path)}`;
+                  const response = await fetch(proxyUrl);
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  imageData = await response.blob();
+                  console.log('✅ Got image via server proxy, size:', imageData.size, 'bytes, type:', imageData.type);
+                } catch (proxyError) {
+                  console.warn('Server proxy failed, trying download URL:', proxyError);
+                  // Fallback to download URL (may have CORS issues)
+                  try {
+                    const url = await storageRef.getDownloadURL();
+                    const response = await fetch(url);
+                    imageData = await response.blob();
+                    console.log('✅ Got image via download URL, size:', imageData.size, 'bytes');
+                  } catch (urlError) {
+                    console.error('Download URL also failed:', urlError);
+                  }
+                }
+              }
+            } catch (sdkError) {
+              console.warn('⚠️ Firebase Storage SDK method failed, trying download URL:', sdkError);
+              // Fallback to download URL
+              try {
+                const url = await storageRef.getDownloadURL();
+                console.log('📥 Got download URL, fetching...');
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                if (docType === 'application/pdf') {
+                  originalPdfBytes = await response.arrayBuffer();
+                  console.log('✅ Got PDF via download URL, size:', originalPdfBytes.byteLength, 'bytes');
+                } else if (docType.startsWith('image/')) {
+                  isImage = true;
+                  imageData = await response.blob();
+                  console.log('✅ Got image via download URL, size:', imageData.size, 'bytes');
+                }
+              } catch (urlError) {
+                console.error('❌ Error fetching file from download URL:', urlError);
+              }
             }
           } else if (data.file_data) {
+            console.log('📦 Using base64 file_data from document...');
             // Handle base64 data
             let base64Data = data.file_data;
             if (typeof base64Data === 'object' && base64Data !== null) {
@@ -835,9 +885,87 @@ async function downloadDocumentWithAnalysis(docId, docName, docType, analysisDat
                 imageData = new Blob([bytes], { type: docType });
               }
             }
+          } else {
+            console.warn('⚠️ Document has no file_path or file_data');
+          }
+        } else {
+          console.warn('⚠️ Document not found in Firestore');
+        }
+      } catch (firestoreError) {
+        console.error('❌ Error accessing Firestore:', firestoreError);
+        // Try fallback with fileUrl if available
+        if (fileUrl) {
+          console.log('🔄 Fallback: Trying to fetch from provided fileUrl...');
+          try {
+            if (docType === 'application/pdf') {
+              const response = await fetch(fileUrl);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              originalPdfBytes = await response.arrayBuffer();
+              console.log('✅ Got PDF from fileUrl, size:', originalPdfBytes.byteLength, 'bytes');
+            } else if (docType.startsWith('image/')) {
+              isImage = true;
+              const response = await fetch(fileUrl);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              imageData = await response.blob();
+              console.log('✅ Got image from fileUrl, size:', imageData.size, 'bytes');
+            }
+          } catch (fetchError) {
+            console.error('❌ Error fetching file from URL:', fetchError);
           }
         }
       }
+    } else if (fileUrl) {
+      // Fallback: try server proxy first, then direct fetch
+      console.log('🔄 Fallback: Trying to fetch from fileUrl...');
+      try {
+        // Extract file path from URL if it's a Firebase Storage URL
+        const firebasePathMatch = fileUrl.match(/\/o\/([^?]+)/);
+        if (firebasePathMatch && docType.startsWith('image/')) {
+          const filePath = decodeURIComponent(firebasePathMatch[1]);
+          console.log('📥 Trying server proxy with extracted path:', filePath);
+          try {
+            const proxyUrl = `/api/fetch-file?path=${encodeURIComponent(filePath)}`;
+            const proxyResponse = await fetch(proxyUrl);
+            if (proxyResponse.ok) {
+              isImage = true;
+              imageData = await proxyResponse.blob();
+              console.log('✅ Got image via server proxy, size:', imageData.size, 'bytes');
+            } else {
+              throw new Error('Proxy failed');
+            }
+          } catch (proxyError) {
+            console.warn('Server proxy failed, trying direct URL:', proxyError);
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            isImage = true;
+            imageData = await response.blob();
+            console.log('✅ Got image from fileUrl, size:', imageData.size, 'bytes');
+          }
+        } else {
+          // Not a Firebase URL or not an image, try direct fetch
+          if (docType === 'application/pdf') {
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            originalPdfBytes = await response.arrayBuffer();
+            console.log('✅ Got PDF from fileUrl, size:', originalPdfBytes.byteLength, 'bytes');
+          } else if (docType.startsWith('image/')) {
+            isImage = true;
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            imageData = await response.blob();
+            console.log('✅ Got image from fileUrl, size:', imageData.size, 'bytes');
+          }
+        }
+      } catch (fetchError) {
+        console.error('❌ Error fetching file from URL:', fetchError);
+      }
+    }
+
+    // Verify we have the original document before proceeding
+    if (!originalPdfBytes && !imageData) {
+      const errorMsg = 'Could not retrieve the original document from Firebase Storage. Please ensure the file exists and Firebase Storage is properly configured.';
+      console.error('❌', errorMsg);
+      alert(errorMsg + '\n\nThe PDF will only contain the analysis.');
     }
 
     // Create analysis PDF using jsPDF
@@ -909,36 +1037,103 @@ async function downloadDocumentWithAnalysis(docId, docName, docType, analysisDat
     const { PDFDocument } = PDFLib;
     const mergedPdf = await PDFDocument.create();
 
-    // Add original document (first page)
+    // IMPORTANT: Add original document FIRST (page 1)
     if (originalPdfBytes) {
-      const originalPdf = await PDFDocument.load(originalPdfBytes);
-      const pages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
-      pages.forEach((page) => mergedPdf.addPage(page));
-    } else if (isImage && imageData) {
-      // Convert image to PDF page
-      const imageBytes = await imageData.arrayBuffer();
-      let image;
-      if (docType.includes('png')) {
-        image = await mergedPdf.embedPng(imageBytes);
-      } else {
-        image = await mergedPdf.embedJpg(imageBytes);
+      console.log('📄 Adding original PDF document as FIRST page...');
+      try {
+        const originalPdf = await PDFDocument.load(originalPdfBytes);
+        const pages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+        pages.forEach((page) => mergedPdf.addPage(page));
+        console.log(`✅ Added ${pages.length} page(s) from original PDF document as FIRST page`);
+      } catch (pdfError) {
+        console.error('❌ Error loading original PDF:', pdfError);
+        alert('Error: Could not load the original PDF document. The download will only contain the analysis.');
       }
-      const page = mergedPdf.addPage([image.width, image.height]);
-      page.drawImage(image, {
-        x: 0,
-        y: 0,
-        width: image.width,
-        height: image.height,
-      });
+    } else if (isImage && imageData) {
+      console.log('🖼️ Converting image to PDF and adding as FIRST page...');
+      try {
+        // Convert image to PDF page - ensure it's the FIRST page
+        let imageBytes;
+        if (imageData instanceof Blob) {
+          imageBytes = await imageData.arrayBuffer();
+        } else if (imageData instanceof ArrayBuffer) {
+          imageBytes = imageData;
+        } else {
+          imageBytes = imageData;
+        }
+        
+        console.log('🖼️ Embedding image, size:', imageBytes.byteLength, 'bytes');
+        let image;
+        if (docType.includes('png') || docType === 'image/png') {
+          image = await mergedPdf.embedPng(imageBytes);
+        } else if (docType.includes('jpeg') || docType === 'image/jpeg' || docType === 'image/jpg') {
+          image = await mergedPdf.embedJpg(imageBytes);
+        } else {
+          // Try PNG first, fallback to JPG
+          try {
+            image = await mergedPdf.embedPng(imageBytes);
+          } catch {
+            image = await mergedPdf.embedJpg(imageBytes);
+          }
+        }
+        
+        console.log('🖼️ Image embedded, dimensions:', image.width, 'x', image.height);
+        
+        // Create page with image dimensions, but ensure it fits on A4 if too large
+        const maxWidth = 595; // A4 width in points
+        const maxHeight = 842; // A4 height in points
+        let pageWidth = image.width;
+        let pageHeight = image.height;
+        
+        // Scale down if image is larger than A4
+        if (pageWidth > maxWidth || pageHeight > maxHeight) {
+          const scale = Math.min(maxWidth / pageWidth, maxHeight / pageHeight);
+          pageWidth = pageWidth * scale;
+          pageHeight = pageHeight * scale;
+          console.log('📏 Scaled image to fit A4:', pageWidth, 'x', pageHeight);
+        }
+        
+        const page = mergedPdf.addPage([pageWidth, pageHeight]);
+        page.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        });
+        console.log('✅ Added image as FIRST page');
+      } catch (imageError) {
+        console.error('❌ Error converting image to PDF:', imageError);
+        alert('Error: Could not convert the image to PDF. The download will only contain the analysis.');
+      }
+    } else {
+      console.error('❌ CRITICAL: No original document available! originalPdfBytes:', !!originalPdfBytes, 'isImage:', isImage, 'imageData:', !!imageData);
+      alert('Warning: Could not retrieve the original document. The PDF will only contain the analysis.');
     }
 
-    // Add analysis PDF (second page)
-    const analysisPdfDoc = await PDFDocument.load(analysisPdfBytes);
-    const analysisPages = await mergedPdf.copyPages(analysisPdfDoc, analysisPdfDoc.getPageIndices());
-    analysisPages.forEach((page) => mergedPdf.addPage(page));
+    // Add analysis PDF SECOND (page 2+)
+    console.log('📊 Adding analysis as second page...');
+    try {
+      const analysisPdfDoc = await PDFDocument.load(analysisPdfBytes);
+      const analysisPages = await mergedPdf.copyPages(analysisPdfDoc, analysisPdfDoc.getPageIndices());
+      analysisPages.forEach((page) => mergedPdf.addPage(page));
+      console.log(`✅ Added ${analysisPages.length} page(s) from analysis`);
+    } catch (analysisError) {
+      console.error('❌ Error loading analysis PDF:', analysisError);
+      alert('Error: Could not load the analysis. The PDF will only contain the original document.');
+    }
+
+    // Verify we have at least one page
+    const pageCount = mergedPdf.getPageCount();
+    console.log('📄 Total pages in merged PDF:', pageCount);
+    
+    if (pageCount === 0) {
+      throw new Error('No pages were added to the PDF. Cannot create empty PDF.');
+    }
 
     // Generate and download
+    console.log('💾 Generating final PDF...');
     const mergedPdfBytes = await mergedPdf.save();
+    console.log('✅ PDF generated, size:', mergedPdfBytes.length, 'bytes');
     const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

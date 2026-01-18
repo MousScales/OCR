@@ -50,7 +50,76 @@ service firebase.storage {
 
 **Note:** These are permissive rules for testing. In production, you should add proper authentication and authorization.
 
-## Step 4: Verify Configuration
+## Step 4: Create Firestore Index (REQUIRED)
+
+Firestore requires a composite index for queries that filter by one field and order by another. 
+
+**Option 1: Click the link in the error message**
+When you see the error, click the link provided in the console. It will take you directly to the Firebase Console to create the index.
+
+**Option 2: Create manually**
+1. Go to Firebase Console → Firestore Database → Indexes
+2. Click "Create Index"
+3. Collection ID: `documents`
+4. Fields to index:
+   - `section` (Ascending)
+   - `created_at` (Descending)
+5. Click "Create"
+
+**Note:** Index creation can take a few minutes. The app will work with localStorage fallback while the index is being created.
+
+## Step 5: Configure CORS for Firebase Storage (IMPORTANT!)
+
+Firebase Storage requires CORS configuration for web uploads/downloads. Use one of these methods:
+
+### Method 1: Using gsutil (Recommended)
+
+1. **Install Google Cloud SDK**:
+   - Download from: https://cloud.google.com/sdk/docs/install
+   - Or use: `curl https://sdk.cloud.google.com | bash`
+
+2. **Authenticate**:
+   ```bash
+   gcloud auth login
+   gcloud config set project ocrr-b4765
+   ```
+
+3. **Create CORS config file** (`cors.json`):
+   ```json
+   [
+     {
+       "origin": ["*"],
+       "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+       "maxAgeSeconds": 3600,
+       "responseHeader": ["Content-Type", "Authorization"]
+     }
+   ]
+   ```
+
+4. **Apply CORS**:
+   ```bash
+   gsutil cors set cors.json gs://ocrr-b4765.firebasestorage.app
+   ```
+
+### Method 2: Firebase Console (Alternative)
+
+1. Go to Firebase Console → Storage
+2. Click on the three dots menu → "Edit CORS configuration"
+3. Add the CORS rules manually
+
+**For production**, restrict origins to your actual domains:
+```json
+[
+  {
+    "origin": ["https://ocr-mu-seven.vercel.app", "https://yourdomain.com"],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Authorization"]
+  }
+]
+```
+
+## Step 6: Verify Configuration
 
 The Firebase configuration is already set in:
 - `public/section-view.html`
@@ -97,4 +166,17 @@ After setup:
 2. Check Firebase Console → Firestore Database → documents collection
 3. Check Firebase Console → Storage → files should appear
 4. Verify documents load correctly in the app
+5. Test PDF download functionality - it should work without CORS errors
+
+## Troubleshooting
+
+### CORS Errors
+If you see CORS errors when downloading PDFs:
+- The code now uses Firebase Storage SDK methods (`getBytes()`, `getBlob()`) which should work without CORS configuration
+- If errors persist, configure CORS for Firebase Storage (see Step 4 in the original setup)
+- Make sure Firebase Storage security rules allow read access
+
+### Index Errors
+- The code now sorts in memory, so index errors should not occur
+- If you see index errors, click the link in the error message to create the index automatically
 
